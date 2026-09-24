@@ -1,0 +1,6 @@
+name: broken-test
+
+initial_state: {}
+
+expected_state:
+  - path: order.status

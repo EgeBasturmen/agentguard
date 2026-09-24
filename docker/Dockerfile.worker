@@ -1,0 +1,12 @@
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+COPY src/agentguard/execution/container_worker.py /opt/agentguard/worker.py
+
+USER 65534:65534
+
+WORKDIR /tmp
+
+ENTRYPOINT ["python", "-I", "/opt/agentguard/worker.py"]
