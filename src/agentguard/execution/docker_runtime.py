@@ -35,17 +35,16 @@ class DockerRuntime:
     CLEANUP_TIMEOUT_SECONDS = 15
     OUTPUT_GRACE_SECONDS = 2
 
-    def _docker_command(
+    def _docker_create_command(
         self,
         container_name: str,
         policy: SecurityPolicy,
     ) -> list[str]:
         return [
             "docker",
-            "run",
+            "create",
             "--name",
             container_name,
-            "--rm",
             "-i",
             "--network",
             "none",
@@ -68,6 +67,56 @@ class DockerRuntime:
             "/tmp",
             self.IMAGE,
         ]
+    def _create_container(
+        self,
+        container_name: str,
+        policy: SecurityPolicy,
+        deadline: float,
+    ) -> None:
+        process = launch_with_deadline(
+            command=self._docker_create_command(
+                container_name,
+                policy,
+            ),
+            deadline=deadline,
+        )
+
+        try:
+            stdout, stderr = process.communicate(
+                timeout=max(0.1, deadline - time.monotonic())
+            )
+        except subprocess.TimeoutExpired as exc:
+            try:
+                process.kill()
+                process.communicate(timeout=5)
+            except (OSError, subprocess.TimeoutExpired) as cleanup_exc:
+                raise ContainerRuntimeError(
+                    "Docker container creation timed out, and "
+                    "the Docker CLI process could not be fully terminated."
+                ) from cleanup_exc
+
+            raise ContainerRuntimeError(
+                "Docker container creation timed out."
+            ) from exc
+
+        if process.returncode != 0:
+            error_text = stderr.decode(
+                "utf-8",
+                errors="replace",
+            )
+            raise ContainerRuntimeError(
+                f"Docker container creation failed: {error_text}"
+            )
+
+        created_id = stdout.decode(
+            "utf-8",
+            errors="replace",
+        ).strip()
+
+        if not created_id:
+            raise ContainerRuntimeError(
+                "Docker create returned no container ID."
+            )
 
     def _cleanup_container(
         self,
@@ -231,13 +280,26 @@ class DockerRuntime:
         execution_error = None
 
         try:
-            process = launch_with_deadline(
-                command=self._docker_command(
-                    container_name,
-                    policy,
-                ),
+            # 1. Container'ı oluştur. Bu aşamada worker çalışmaz.
+            self._create_container(
+                container_name=container_name,
+                policy=policy,
                 deadline=deadline,
             )
+
+            # 2. Oluşturma başarılıysa worker'ı başlat ve
+            #    stdin/stdout bağlantısını aç.
+            process = launch_with_deadline(
+                command=[
+                    "docker",
+                    "start",
+                    "-a",
+                    "-i",
+                    container_name,
+                ],
+                deadline=deadline,
+            )
+
 
             stdout_thread = threading.Thread(
                 target=read_limited,
