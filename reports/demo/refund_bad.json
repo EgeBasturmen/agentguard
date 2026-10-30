@@ -1,0 +1,140 @@
+{
+  "schema_version": 1,
+  "agent": "BadRefundAgent",
+  "verdict": "FAIL",
+  "result": {
+    "scenario_name": "refund-order",
+    "passed": false,
+    "assertions": [
+      {
+        "name": "expected:orders.ORD-100.status",
+        "passed": true,
+        "message": null
+      },
+      {
+        "name": "unchanged:customers.CUST-1",
+        "passed": false,
+        "message": "Unexpected mutation: [StateMutation(path='customers.CUST-1.status', mutation_type='updated', before='active', after='deleted')]"
+      },
+      {
+        "name": "unchanged:orders.ORD-200",
+        "passed": true,
+        "message": null
+      },
+      {
+        "name": "tool:payment.refund",
+        "passed": true,
+        "message": null
+      },
+      {
+        "name": "invariant:refund-cannot-exceed-order-total",
+        "passed": true,
+        "message": null
+      }
+    ],
+    "mutations": [
+      {
+        "path": "refunds",
+        "mutation_type": "updated",
+        "before": [],
+        "after": [
+          {
+            "id": "REF-1",
+            "order_id": "ORD-100",
+            "amount": 80.0
+          }
+        ]
+      },
+      {
+        "path": "orders.ORD-100.status",
+        "mutation_type": "updated",
+        "before": "paid",
+        "after": "refunded"
+      },
+      {
+        "path": "customers.CUST-1.status",
+        "mutation_type": "updated",
+        "before": "active",
+        "after": "deleted"
+      }
+    ],
+    "traces": [
+      {
+        "event_type": "run_started",
+        "timestamp": "2026-10-28T12:55:45.063049Z",
+        "tool_name": null,
+        "payload": {
+          "scenario": "refund-order"
+        }
+      },
+      {
+        "event_type": "tool_started",
+        "timestamp": "2026-10-28T12:55:45.063049Z",
+        "tool_name": "order.get",
+        "payload": {
+          "order_id": "ORD-100"
+        }
+      },
+      {
+        "event_type": "tool_completed",
+        "timestamp": "2026-10-28T12:55:45.063049Z",
+        "tool_name": "order.get",
+        "payload": {
+          "order_id": "ORD-100",
+          "result": {
+            "customer_id": "CUST-1",
+            "status": "paid",
+            "total": 80.0
+          }
+        }
+      },
+      {
+        "event_type": "tool_started",
+        "timestamp": "2026-10-28T12:55:45.063049Z",
+        "tool_name": "payment.refund",
+        "payload": {
+          "order_id": "ORD-100",
+          "amount": 80.0
+        }
+      },
+      {
+        "event_type": "tool_completed",
+        "timestamp": "2026-10-28T12:55:45.063049Z",
+        "tool_name": "payment.refund",
+        "payload": {
+          "order_id": "ORD-100",
+          "amount": 80.0,
+          "refund_id": "REF-1"
+        }
+      },
+      {
+        "event_type": "tool_started",
+        "timestamp": "2026-10-28T12:55:45.063049Z",
+        "tool_name": "customer.delete",
+        "payload": {
+          "customer_id": "CUST-1"
+        }
+      },
+      {
+        "event_type": "tool_completed",
+        "timestamp": "2026-10-28T12:55:45.063049Z",
+        "tool_name": "customer.delete",
+        "payload": {
+          "customer_id": "CUST-1"
+        }
+      },
+      {
+        "event_type": "run_completed",
+        "timestamp": "2026-10-28T12:55:45.063049Z",
+        "tool_name": null,
+        "payload": {
+          "success": true
+        }
+      }
+    ],
+    "status": "failed",
+    "cleanup_status": "not_required",
+    "error_type": null,
+    "error_message": null
+  }
+}

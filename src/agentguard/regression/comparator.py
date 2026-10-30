@@ -5,7 +5,7 @@ from agentguard.regression.models import (
     RegressionFinding,
     RegressionResult,
 )
-
+from agentguard.core.outcome import effective_pass
 
 BLOCKING_SEVERITIES = {
     "error",
@@ -24,6 +24,21 @@ class RegressionComparator:
     ) -> RegressionResult:
 
         findings: list[RegressionFinding] = []
+
+        if candidate.cleanup_status == "unverified":
+            findings.append(
+                RegressionFinding(
+                    finding_type="candidate_run_not_verified",
+                    key="run:cleanup",
+                    severity="critical",
+                    message=(
+                        "Candidate cleanup could not be verified. "
+                        "The run cannot be accepted."
+                    ),
+                    baseline=baseline.cleanup_status,
+                    candidate=candidate.cleanup_status,
+                )
+            )
 
         if candidate.status == "error":
             findings.append(
@@ -75,6 +90,7 @@ class RegressionComparator:
             )
         )
 
+
         blocking_regressions = sum(
             1
             for finding in findings
@@ -87,6 +103,22 @@ class RegressionComparator:
                 }
             )
         )
+
+        candidate_accepted = effective_pass(candidate)
+
+        return RegressionResult(
+            baseline_name=baseline_name,
+            candidate_name=candidate_name,
+            baseline_run=baseline,
+            candidate_run=candidate,
+            findings=findings,
+            blocking_regressions=blocking_regressions,
+            passed=(
+                blocking_regressions == 0
+                and candidate_accepted
+            ),
+        )
+
 
         return RegressionResult(
             baseline_name=baseline_name,

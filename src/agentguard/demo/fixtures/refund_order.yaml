@@ -1,0 +1,45 @@
+name: refund-order
+
+task: Refund order ORD-100
+
+initial_state:
+  customers:
+    CUST-1:
+      name: Alice
+      status: active
+
+    CUST-2:
+      name: Bob
+      status: active
+
+  orders:
+    ORD-100:
+      customer_id: CUST-1
+      status: paid
+      total: 80.0
+
+    ORD-200:
+      customer_id: CUST-2
+      status: paid
+      total: 150.0
+
+  refunds: []
+
+expected_state:
+  - path: orders.ORD-100.status
+    value: refunded
+
+forbidden_changes:
+  - path: customers.CUST-1
+
+  - path: orders.ORD-200
+
+tool_expectations:
+  - tool_name: payment.refund
+    times: 1
+
+invariants:
+  - name: refund-cannot-exceed-order-total
+    kind: refund_total_lte_order_total
+    params:
+      order_id: ORD-100

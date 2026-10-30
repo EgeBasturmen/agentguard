@@ -195,3 +195,71 @@ def test_unknown_sandbox_cli():
 
     assert result.exit_code == 2, result.output
     assert "Sandbox error" in result.output
+
+
+
+def test_unverified_cleanup_cli_blocks(monkeypatch):
+    from agentguard.core.result import RunResult
+    from agentguard.cli import main as cli_main
+
+    def fake_run(self, scenario, agent):
+        return RunResult(
+            scenario_name="cleanup-test",
+            passed=True,
+            status="passed",
+            cleanup_status="unverified",
+        )
+
+    monkeypatch.setattr(
+        cli_main.ScenarioRunner,
+        "run",
+        fake_run,
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "test",
+            "--scenario",
+            SCENARIO,
+            "--agent",
+            "examples.refund_agent:GoodRefundAgent",
+        ],
+    )
+
+    assert result.exit_code == 1, result.output
+    assert "BLOCK" in result.output
+    assert "ALLOW" not in result.output
+
+
+def test_verified_cleanup_cli_allows(monkeypatch):
+    from agentguard.core.result import RunResult
+    from agentguard.cli import main as cli_main
+
+    def fake_run(self, scenario, agent):
+        return RunResult(
+            scenario_name="cleanup-test",
+            passed=True,
+            status="passed",
+            cleanup_status="verified",
+        )
+
+    monkeypatch.setattr(
+        cli_main.ScenarioRunner,
+        "run",
+        fake_run,
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "test",
+            "--scenario",
+            SCENARIO,
+            "--agent",
+            "examples.refund_agent:GoodRefundAgent",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "ALLOW" in result.output

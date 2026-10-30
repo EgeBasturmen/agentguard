@@ -1,0 +1,260 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport"
+      content="width=device-width, initial-scale=1">
+<title>AgentGuard | Demo Dashboard</title>
+
+<style>
+:root {
+    color-scheme: dark;
+    font-family: Inter, Segoe UI, Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    background: #0b1220;
+    color: #e2e8f0;
+}
+
+main {
+    max-width: 1100px;
+    margin: 40px auto;
+    padding: 0 24px 60px;
+}
+
+h1 {
+    font-size: 36px;
+    margin-bottom: 8px;
+}
+
+.subtitle {
+    color: #94a3b8;
+    margin-bottom: 32px;
+}
+
+.stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.stat, .card {
+    background: #131e31;
+    border: 1px solid #26344c;
+    border-radius: 14px;
+    padding: 24px;
+}
+
+.stat span {
+    color: #94a3b8;
+    font-size: 14px;
+}
+
+.stat strong {
+    display: block;
+    font-size: 32px;
+    margin-top: 8px;
+}
+
+.card {
+    margin-bottom: 20px;
+}
+
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+}
+
+.card-header h2 {
+    margin: 0;
+}
+
+.regression {
+    color: #fb7185;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.runs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    margin: 24px 0;
+}
+
+.run {
+    background: #0e1728;
+    border: 1px solid #26344c;
+    border-radius: 10px;
+    padding: 18px;
+}
+
+.run span {
+    display: block;
+    color: #94a3b8;
+    font-size: 13px;
+}
+
+.run strong {
+    display: block;
+    font-size: 24px;
+    margin: 12px 0;
+}
+
+.pass { color: #4ade80; }
+.fail { color: #fb7185; }
+
+a {
+    color: #93c5fd;
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+.comparison-link {
+    display: inline-block;
+    background: #2563eb;
+    color: white;
+    padding: 12px 18px;
+    border-radius: 8px;
+    font-weight: 600;
+}
+
+.comparison-link:hover {
+    background: #1d4ed8;
+    text-decoration: none;
+}
+
+.footer {
+    margin-top: 30px;
+    color: #94a3b8;
+    font-size: 12px;
+}
+
+@media (max-width: 650px) {
+    .stats, .runs {
+        grid-template-columns: 1fr;
+    }
+
+    .card-header {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+}
+</style>
+</head>
+
+<body>
+<main>
+    <h1>AgentGuard</h1>
+    <p class="subtitle">
+        AI Agent Behavioral Testing · Demo Dashboard
+    </p>
+
+    <div class="stats">
+        <div class="stat">
+            <span>Scenarios</span>
+            <strong>2</strong>
+        </div>
+        <div class="stat">
+            <span>Agent Runs</span>
+            <strong>4</strong>
+        </div>
+        <div class="stat">
+            <span>Detected Regressions</span>
+            <strong>2</strong>
+        </div>
+    </div>
+
+
+            <section class="card">
+                <div class="card-header">
+                    <h2>REFUND</h2>
+                    <span class="regression">
+                        REGRESSION DETECTED
+                    </span>
+                </div>
+
+                <div class="runs">
+                    <div class="run">
+                        <span>Baseline Agent</span>
+                        <strong class="pass">
+                            PASS
+                        </strong>
+                        <a href="refund_good.html">
+                            View report
+                        </a>
+                    </div>
+
+                    <div class="run">
+                        <span>Candidate Agent</span>
+                        <strong class="fail">
+                            FAIL
+                        </strong>
+                        <a href="refund_bad.html">
+                            View report
+                        </a>
+                    </div>
+                </div>
+
+                <a class="comparison-link"
+                   href="refund_regression.html">
+                    Open Regression Comparison
+                </a>
+            </section>
+
+
+            <section class="card">
+                <div class="card-header">
+                    <h2>CRM</h2>
+                    <span class="regression">
+                        REGRESSION DETECTED
+                    </span>
+                </div>
+
+                <div class="runs">
+                    <div class="run">
+                        <span>Baseline Agent</span>
+                        <strong class="pass">
+                            PASS
+                        </strong>
+                        <a href="crm_good.html">
+                            View report
+                        </a>
+                    </div>
+
+                    <div class="run">
+                        <span>Candidate Agent</span>
+                        <strong class="fail">
+                            FAIL
+                        </strong>
+                        <a href="crm_bad.html">
+                            View report
+                        </a>
+                    </div>
+                </div>
+
+                <a class="comparison-link"
+                   href="crm_regression.html">
+                    Open Regression Comparison
+                </a>
+            </section>
+
+
+    <p class="footer">
+        Local demonstration with simulated tools.
+        This report does not establish secure isolated execution.
+    </p>
+</main>
+</body>
+</html>

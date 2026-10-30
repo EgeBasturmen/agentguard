@@ -24,6 +24,19 @@ from agentguard.adapters.sandbox import (
 )
 from agentguard.sandbox.commerce import CommerceSandbox
 
+from agentguard.reporting.export import (
+    effective_pass,
+    export_html,
+    export_json,
+)
+
+from agentguard.reporting.comparison import (
+    load_report,
+    compare_reports,
+)
+from agentguard.reporting.dashboard import export_comparison_html
+from agentguard.demo.runner import run_demo
+from agentguard.core.outcome import effective_pass
 app = typer.Typer(
     name="agentguard",
     help="Regression and side-effect testing for AI agents.",
@@ -117,7 +130,7 @@ def render_report(
 
     console.print()
 
-    if result.passed:
+    if effective_pass(result):
         console.print(
             Panel(
                 "[bold green]ALLOW[/bold green]\n"
@@ -125,14 +138,47 @@ def render_report(
                 title="Test Verdict",
             )
         )
+
     else:
+        reasons = []
+
+        if failed_count:
+            reasons.append(
+                f"{failed_count} safety check(s) failed."
+            )
+
+        if result.status == "error":
+            reasons.append(
+                "Agent execution failed."
+            )
+        elif result.status != "passed":
+            reasons.append(
+                f"Execution status: {result.status}."
+            )
+
+        if result.cleanup_status == "unverified":
+            reasons.append(
+                "Container cleanup could not be verified."
+            )
+
+        if not result.passed and not reasons:
+            reasons.append(
+                "Run was not marked as passed."
+            )
+
+        if not reasons:
+            reasons.append(
+                "Run outcome is inconsistent and cannot be accepted."
+            )
+
         console.print(
             Panel(
                 "[bold red]BLOCK[/bold red]\n"
-                f"{failed_count} safety check(s) failed.",
+                + "\n".join(reasons),
                 title="Test Verdict",
             )
         )
+
 
 
 def render_regression_report(
@@ -272,6 +318,16 @@ def test_command(
             "agentguard.sandbox.files:FileSandbox"
         ),
     ),
+    html_report: Path | None = typer.Option(
+        None,
+        "--html-report",
+        help="Save a standalone HTML report.",
+    ),
+    json_report: Path | None = typer.Option(
+        None,
+        "--json-report",
+        help="Save a machine-readable JSON report.",
+    ),
 ) -> None:
 
     (
@@ -297,8 +353,15 @@ def test_command(
         result=result,
         agent_name=loaded_agent.__class__.__name__,
     )
+    if html_report is not None:
+        export_html(result, html_report, agent)
+        console.print(f"HTML report: {html_report}")
 
-    if not result.passed:
+    if json_report is not None:
+        export_json(result, json_report, agent)
+        console.print(f"JSON report: {json_report}")
+
+    if not effective_pass(result):
         raise typer.Exit(code=1)
 
 
@@ -385,6 +448,120 @@ def regression_command(
     if not regression_result.passed:
         raise typer.Exit(code=1)
 
+
+@app.command("compare")
+def compare_command(
+    baseline: Path = typer.Argument(
+        ...,
+        help="Baseline AgentGuard JSON report.",
+    ),
+    candidate: Path = typer.Argument(
+        ...,
+        help="Candidate AgentGuard JSON report.",
+    ),
+    html_report: Path = typer.Option(
+        Path("reports/regression.html"),
+        "--html-report",
+        help="Destination for the regression dashboard.",
+    ),
+):
+    """Compare two agent runs and export an HTML dashboard."""
+
+    try:
+        baseline_data = load_report(baseline)
+        candidate_data = load_report(candidate)
+
+        comparison = compare_reports(
+            baseline_data,
+            candidate_data,
+        )
+
+        report_path = export_comparison_html(
+            comparison,
+            html_report,
+        )
+
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        typer.echo(f"Comparison error: {exc}", err=True)
+        raise typer.Exit(code=2)
+
+    if comparison["regression_detected"]:
+        console.print("[bold red]REGRESSION DETECTED[/bold red]")
+    else:
+        console.print("[bold green]NO REGRESSION DETECTED[/bold green]")
+
+    console.print(f"Scenario: {comparison['scenario']}")
+    console.print(
+        f"Baseline: {comparison['baseline_verdict']} "
+        f"({comparison['baseline_agent']})"
+    )
+    console.print(
+        f"Candidate: {comparison['candidate_verdict']} "
+        f"({comparison['candidate_agent']})"
+    )
+
+    for regression in comparison["assertion_regressions"]:
+        console.print(
+            f"[red]FAIL[/red] {regression['name']}"
+        )
+
+    for tool in comparison["added_tools"]:
+        console.print(f"[yellow]New tool:[/yellow] {tool}")
+
+    console.print(f"HTML dashboard: {report_path}")
+
+    if comparison["regression_detected"]:
+        raise typer.Exit(code=1)
+
+@app.command("demo")
+def demo_command(
+    output_dir: Path = typer.Option(
+        Path("reports/demo"),
+        "--output-dir",
+        help="Directory for demo reports.",
+    ),
+):
+    """Run the bundled AgentGuard demo scenarios."""
+
+    console.print(
+        "[bold cyan]Running AgentGuard Demo...[/bold cyan]"
+    )
+
+    summary = run_demo(output_dir)
+
+    for case in summary["cases"]:
+        console.print()
+        console.print(f"[bold]{case['name'].upper()}[/bold]")
+        console.print(
+            f"Good agent: {'PASS' if case['good_passed'] else 'FAIL'}"
+        )
+        console.print(
+            f"Bad agent: {'FAIL' if not case['bad_passed'] else 'PASS'}"
+        )
+        console.print(
+            f"Regression: {case['regression_detected']}"
+        )
+        console.print(
+            f"Dashboard: {case['dashboard']}"
+        )
+
+
+
+    if summary["success"]:
+        console.print(
+            "\n[bold green]DEMO COMPLETED SUCCESSFULLY[/bold green]"
+        )
+    else:
+        console.print(
+            "\n[bold red]DEMO VALIDATION FAILED[/bold red]"
+        )
+        raise typer.Exit(code=1)
+
+    console.print()
+    console.print(
+        f"[bold cyan]Demo dashboard:[/bold cyan] "
+        f"{summary['index']}"
+    )
 
 if __name__ == "__main__":
     app()

@@ -1,4 +1,3 @@
-import subprocess
 from unittest.mock import patch
 
 import pytest
@@ -13,12 +12,13 @@ from agentguard.security.policy import SecurityPolicy
 def test_timeout_removes_container():
     runtime = DockerRuntime()
 
-    original_command = runtime._docker_command
+    original_command = runtime._docker_create_command
 
     def slow_command(container_name, policy):
         command = original_command(container_name, policy)
 
-        # Testte worker yerine üç saniye bekleyen Python çalışır.
+        # Container oluşturulurken normal worker yerine
+        # 3 saniye bekleyen bir Python süreci tanımlıyoruz.
         command[-1:] = [
             "python:3.11-slim",
             "python",
@@ -30,7 +30,7 @@ def test_timeout_removes_container():
 
     with patch.object(
         runtime,
-        "_docker_command",
+        "_docker_create_command",
         side_effect=slow_command,
     ):
         with pytest.raises(
@@ -43,6 +43,7 @@ def test_timeout_removes_container():
                     "scenario_name": "timeout-test",
                 },
                 policy=SecurityPolicy(
+                    execution_mode="isolated",
                     timeout_seconds=1,
                 ),
             )

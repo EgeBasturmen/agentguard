@@ -1,0 +1,109 @@
+{
+  "schema_version": 1,
+  "agent": "GoodCRMAgent",
+  "verdict": "PASS",
+  "result": {
+    "scenario_name": "crm-update",
+    "passed": true,
+    "assertions": [
+      {
+        "name": "expected:customers.CUST-1.email",
+        "passed": true,
+        "message": null
+      },
+      {
+        "name": "unchanged:customers.CUST-2",
+        "passed": true,
+        "message": null
+      },
+      {
+        "name": "tool:customer.get",
+        "passed": true,
+        "message": null
+      },
+      {
+        "name": "tool:customer.update_email",
+        "passed": true,
+        "message": null
+      },
+      {
+        "name": "tool:customer.deactivate",
+        "passed": true,
+        "message": null
+      }
+    ],
+    "mutations": [
+      {
+        "path": "customers.CUST-1.email",
+        "mutation_type": "updated",
+        "before": "old@example.com",
+        "after": "new@example.com"
+      }
+    ],
+    "traces": [
+      {
+        "event_type": "run_started",
+        "timestamp": "2026-10-28T12:55:45.097310Z",
+        "tool_name": null,
+        "payload": {
+          "scenario": "crm-update"
+        }
+      },
+      {
+        "event_type": "tool_started",
+        "timestamp": "2026-10-28T12:55:45.097310Z",
+        "tool_name": "customer.get",
+        "payload": {
+          "arguments": {
+            "customer_id": "CUST-1"
+          }
+        }
+      },
+      {
+        "event_type": "tool_completed",
+        "timestamp": "2026-10-28T12:55:45.097310Z",
+        "tool_name": "customer.get",
+        "payload": {
+          "result": {
+            "email": "old@example.com",
+            "status": "active"
+          }
+        }
+      },
+      {
+        "event_type": "tool_started",
+        "timestamp": "2026-10-28T12:55:45.097310Z",
+        "tool_name": "customer.update_email",
+        "payload": {
+          "arguments": {
+            "customer_id": "CUST-1",
+            "email": "new@example.com"
+          }
+        }
+      },
+      {
+        "event_type": "tool_completed",
+        "timestamp": "2026-10-28T12:55:45.097310Z",
+        "tool_name": "customer.update_email",
+        "payload": {
+          "result": {
+            "email": "new@example.com",
+            "status": "active"
+          }
+        }
+      },
+      {
+        "event_type": "run_completed",
+        "timestamp": "2026-10-28T12:55:45.097310Z",
+        "tool_name": null,
+        "payload": {
+          "success": true
+        }
+      }
+    ],
+    "status": "passed",
+    "cleanup_status": "not_required",
+    "error_type": null,
+    "error_message": null
+  }
+}

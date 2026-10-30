@@ -124,3 +124,57 @@ def test_timeout_does_not_return_late_process():
             time.sleep(0.01)
 
     assert fake_process.killed is True
+
+
+def test_timeout_records_late_process_termination():
+    class FakeProcess:
+        stdin = None
+        stdout = None
+        stderr = None
+
+        def __init__(self):
+            self.killed = False
+            self.waited = False
+
+        def kill(self):
+            self.killed = True
+
+        def wait(self, timeout=None):
+            self.waited = True
+            return 0
+
+    fake_process = FakeProcess()
+
+    popen_can_return = threading.Event()
+
+    def slow_popen(*args, **kwargs):
+        popen_can_return.wait(timeout=2)
+        return fake_process
+
+    deadline = time.monotonic() + 0.05
+
+    with patch(
+        "agentguard.execution.process_launcher.subprocess.Popen",
+        side_effect=slow_popen,
+    ):
+        with pytest.raises(
+            ProcessLaunchTimeout
+        ) as exc_info:
+            launch_with_deadline(
+                ["fake-command"],
+                deadline,
+            )
+
+        handle = exc_info.value.handle
+
+        assert handle.cancelled.is_set()
+
+        popen_can_return.set()
+
+        assert handle.wait_until_finished(
+            timeout=1
+        )
+
+        assert fake_process.killed
+        assert fake_process.waited
+        assert handle.late_process_terminated.is_set()

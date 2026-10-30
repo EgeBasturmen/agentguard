@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgentGuard | refund-order</title>
+<style>
+:root {
+    color-scheme: dark;
+    font-family: Inter, Segoe UI, Arial, sans-serif;
+}
+body {
+    margin: 0;
+    background: #0b1220;
+    color: #e2e8f0;
+    line-height: 1.5;
+}
+main {
+    max-width: 1120px;
+    margin: 42px auto;
+    padding: 0 22px 64px;
+}
+h1 {
+    font-size: 32px;
+    margin: 0 0 8px;
+}
+.subtitle {
+    color: #94a3b8;
+    margin-bottom: 28px;
+}
+.card {
+    background: #131e31;
+    border: 1px solid #26344c;
+    border-radius: 14px;
+    padding: 24px;
+    margin: 18px 0;
+    overflow-x: auto;
+}
+.stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+.stat {
+    flex: 1;
+    min-width: 160px;
+}
+.stat small {
+    display: block;
+    color: #94a3b8;
+}
+.stat strong {
+    font-size: 22px;
+}
+.pass {
+    color: #4ade80;
+    font-weight: 750;
+}
+.fail {
+    color: #fb7185;
+    font-weight: 750;
+}
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+th {
+    text-align: left;
+    color: #94a3b8;
+    font-weight: 600;
+}
+th, td {
+    padding: 12px 10px;
+    border-bottom: 1px solid #28374c;
+    vertical-align: top;
+}
+code {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    color: #c4b5fd;
+}
+h2 {
+    margin: 0 0 14px;
+    font-size: 20px;
+}
+.note {
+    color: #94a3b8;
+    font-size: 13px;
+}
+
+
+</style>
+</head>
+<body>
+<main>
+
+<h1>AgentGuard <span class="pass">PASS</span></h1>
+<p class="subtitle">
+AI agent behavioral testing · Local execution report
+</p>
+
+<div class="card stats">
+    <div class="stat">
+        <small>Scenario</small>
+        <strong>refund-order</strong>
+    </div>
+    <div class="stat">
+        <small>Agent</small>
+        <strong>GoodRefundAgent</strong>
+    </div>
+    <div class="stat">
+        <small>Execution status</small>
+        <strong>passed</strong>
+    </div>
+    <div class="stat">
+        <small>Cleanup</small>
+        <strong>not_required</strong>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Assertions (5)</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Result</th>
+                <th>Check</th>
+                <th>Details</th>
+            </tr>
+        </thead>
+        <tbody><tr><td><span class='pass'>PASS</span></td><td>expected:orders.ORD-100.status</td><td>—</td></tr><tr><td><span class='pass'>PASS</span></td><td>unchanged:customers.CUST-1</td><td>—</td></tr><tr><td><span class='pass'>PASS</span></td><td>unchanged:orders.ORD-200</td><td>—</td></tr><tr><td><span class='pass'>PASS</span></td><td>tool:payment.refund</td><td>—</td></tr><tr><td><span class='pass'>PASS</span></td><td>invariant:refund-cannot-exceed-order-total</td><td>—</td></tr></tbody>
+    </table>
+</div>
+
+<div class="card">
+    <h2>State mutations (2)</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Type</th>
+                <th>Path</th>
+                <th>Before</th>
+                <th>After</th>
+            </tr>
+        </thead>
+        <tbody><tr><td>updated</td><td>refunds</td><td><code>[]</code></td><td><code>[{&#x27;id&#x27;: &#x27;REF-1&#x27;, &#x27;order_id&#x27;: &#x27;ORD-100&#x27;, &#x27;amount&#x27;: 80.0}]</code></td></tr><tr><td>updated</td><td>orders.ORD-100.status</td><td><code>&#x27;paid&#x27;</code></td><td><code>&#x27;refunded&#x27;</code></td></tr></tbody>
+    </table>
+</div>
+
+<div class="card">
+    <h2>Trace events (6)</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Time</th>
+                <th>Event</th>
+                <th>Tool</th>
+                <th>Payload</th>
+            </tr>
+        </thead>
+        <tbody><tr><td>2026-10-28T12:55:45.062295+00:00</td><td>run_started</td><td>—</td><td><code>{&quot;scenario&quot;: &quot;refund-order&quot;}</code></td></tr><tr><td>2026-10-28T12:55:45.062295+00:00</td><td>tool_started</td><td>order.get</td><td><code>{&quot;order_id&quot;: &quot;ORD-100&quot;}</code></td></tr><tr><td>2026-10-28T12:55:45.062295+00:00</td><td>tool_completed</td><td>order.get</td><td><code>{&quot;order_id&quot;: &quot;ORD-100&quot;, &quot;result&quot;: {&quot;customer_id&quot;: &quot;CUST-1&quot;, &quot;status&quot;: &quot;paid&quot;, &quot;total&quot;: 80.0}}</code></td></tr><tr><td>2026-10-28T12:55:45.062295+00:00</td><td>tool_started</td><td>payment.refund</td><td><code>{&quot;order_id&quot;: &quot;ORD-100&quot;, &quot;amount&quot;: 80.0}</code></td></tr><tr><td>2026-10-28T12:55:45.062295+00:00</td><td>tool_completed</td><td>payment.refund</td><td><code>{&quot;order_id&quot;: &quot;ORD-100&quot;, &quot;amount&quot;: 80.0, &quot;refund_id&quot;: &quot;REF-1&quot;}</code></td></tr><tr><td>2026-10-28T12:55:45.062295+00:00</td><td>run_completed</td><td>—</td><td><code>{&quot;success&quot;: true}</code></td></tr></tbody>
+    </table>
+</div>
+
+<div class="card">
+    <h2>Execution errors</h2>
+    <p>
+        None:
+        —
+    </p>
+</div>
+
+<p class="note">
+This report reflects configured checks and recorded events.
+It is not proof of secure isolated execution.
+</p>
+
+</main>
+</body>
+</html>

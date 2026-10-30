@@ -6,7 +6,7 @@ import uuid
 from typing import Any
 
 from pydantic import ValidationError
-
+import re
 from agentguard.execution.protocol import (
     MAX_REQUEST_BYTES,
     MAX_RESPONSE_BYTES,
@@ -16,12 +16,17 @@ from agentguard.execution.protocol import (
 from agentguard.security.policy import SecurityPolicy
 from agentguard.execution.process_io import (
     ProcessIOError,
+    read_limited,
     write_with_deadline,
 )
 from agentguard.execution.process_launcher import (
     ProcessLaunchError,
     ProcessLaunchTimeout,
     launch_with_deadline,
+)
+from agentguard.execution.container_lifecycle import (
+    ContainerLifecycle,
+    ContainerState,
 )
 
 class ContainerRuntimeError(RuntimeError):
@@ -46,6 +51,8 @@ class DockerRuntime:
             "--name",
             container_name,
             "-i",
+            "--restart",
+            "no",
             "--network",
             "none",
             "--read-only",
@@ -72,7 +79,7 @@ class DockerRuntime:
         container_name: str,
         policy: SecurityPolicy,
         deadline: float,
-    ) -> None:
+    ) -> str:
         process = launch_with_deadline(
             command=self._docker_create_command(
                 container_name,
@@ -81,43 +88,155 @@ class DockerRuntime:
             deadline=deadline,
         )
 
-        try:
-            stdout, stderr = process.communicate(
-                timeout=max(0.1, deadline - time.monotonic())
-            )
-        except subprocess.TimeoutExpired as exc:
-            try:
-                process.kill()
-                process.communicate(timeout=5)
-            except (OSError, subprocess.TimeoutExpired) as cleanup_exc:
-                raise ContainerRuntimeError(
-                    "Docker container creation timed out, and "
-                    "the Docker CLI process could not be fully terminated."
-                ) from cleanup_exc
+        stdout_data = bytearray()
+        stderr_data = bytearray()
+        stdout_overflow = threading.Event()
+        stderr_overflow = threading.Event()
 
+        if process.stdout is None or process.stderr is None:
             raise ContainerRuntimeError(
-                "Docker container creation timed out."
-            ) from exc
+                "Docker create output streams are unavailable."
+            )
 
-        if process.returncode != 0:
-            error_text = stderr.decode(
+        stdout_thread = threading.Thread(
+            target=read_limited,
+            args=(
+                process.stdout,
+                MAX_RESPONSE_BYTES,
+                stdout_overflow,
+                stdout_data,
+            ),
+            daemon=True,
+        )
+
+        stderr_thread = threading.Thread(
+            target=read_limited,
+            args=(
+                process.stderr,
+                self.STDERR_LIMIT_BYTES,
+                stderr_overflow,
+                stderr_data,
+            ),
+            daemon=True,
+        )
+
+        stdout_thread.start()
+        stderr_thread.start()
+
+        try:
+            while process.poll() is None:
+                if stdout_overflow.is_set() or stderr_overflow.is_set():
+                    raise ContainerRuntimeError(
+                        "Docker create output exceeds size limit."
+                    )
+
+                if time.monotonic() >= deadline:
+                    raise ContainerRuntimeError(
+                        "Docker container creation timed out."
+                    )
+
+                time.sleep(0.05)
+
+            stdout_thread.join(timeout=self.OUTPUT_GRACE_SECONDS)
+            stderr_thread.join(timeout=self.OUTPUT_GRACE_SECONDS)
+
+            if stdout_thread.is_alive() or stderr_thread.is_alive():
+                raise ContainerRuntimeError(
+                    "Docker create output streams did not finish."
+                )
+
+            if stdout_overflow.is_set() or stderr_overflow.is_set():
+                raise ContainerRuntimeError(
+                    "Docker create output exceeds size limit."
+                )
+
+            if process.returncode != 0:
+                error_text = stderr_data.decode(
+                    "utf-8",
+                    errors="replace",
+                )
+                raise ContainerRuntimeError(
+                    f"Docker container creation failed: {error_text}"
+                )
+
+            created_id = stdout_data.decode(
                 "utf-8",
                 errors="replace",
+            ).strip()
+
+            if not created_id:
+                raise ContainerRuntimeError(
+                    "Docker create returned no container ID."
+                )
+
+            if re.fullmatch(r"[0-9a-f]{64}", created_id) is None:
+                raise ContainerRuntimeError(
+                    "Docker create returned an invalid container ID."
+                )
+            return created_id
+
+        finally:
+            if process.poll() is None:
+                process.kill()
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired as exc:
+                    raise ContainerRuntimeError(
+                        "Docker create CLI process did not terminate."
+                    ) from exc
+    def _inspect_container_state(
+        self,
+        container_ref: str,
+    ) -> str | None:
+        """
+        Return the Docker container state.
+
+        None means Docker confirms that the container
+        does not exist.
+        """
+
+        try:
+            inspection = subprocess.run(
+                [
+                    "docker",
+                    "inspect",
+                    "--format",
+                    "{{.State.Status}}",
+                    container_ref,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=self.CLEANUP_TIMEOUT_SECONDS,
+                check=False,
             )
+        except (OSError, subprocess.TimeoutExpired) as exc:
             raise ContainerRuntimeError(
-                f"Docker container creation failed: {error_text}"
-            )
+                "Could not inspect container state."
+            ) from exc
 
-        created_id = stdout.decode(
-            "utf-8",
-            errors="replace",
-        ).strip()
+        if inspection.returncode == 0:
+            state = inspection.stdout.strip()
 
-        if not created_id:
-            raise ContainerRuntimeError(
-                "Docker create returned no container ID."
-            )
+            if not state:
+                raise ContainerRuntimeError(
+                    "Docker inspect returned an empty "
+                    "container state."
+                )
 
+            return state
+
+        error_text = inspection.stderr.lower()
+
+        if (
+            "no such object" in error_text
+            or "no such container" in error_text
+        ):
+            return None
+
+        raise ContainerRuntimeError(
+            "Container state inspection failed: "
+            f"{inspection.stderr.strip()}"
+        )
     def _cleanup_container(
         self,
         container_name: str,
@@ -219,14 +338,10 @@ class DockerRuntime:
                 "environment access."
             )
 
-
-
         try:
             validated_request = WorkerRequest.model_validate(
                 request
             )
-
-
         except ValidationError as exc:
             raise ContainerRuntimeError(
                 f"Invalid worker request: {exc}"
@@ -240,14 +355,20 @@ class DockerRuntime:
             raise ContainerRuntimeError(
                 "Worker request exceeds size limit."
             )
+
         container_name = f"agentguard-{uuid.uuid4().hex}"
         deadline = time.monotonic() + policy.timeout_seconds
 
-        
+        lifecycle = ContainerLifecycle(
+            name=container_name
+        )
+        container_id: str | None = None
 
         process = None
+
         stdout_data = bytearray()
         stderr_data = bytearray()
+
         stdout_overflow = threading.Event()
         stderr_overflow = threading.Event()
         stop_reading = threading.Event()
@@ -268,7 +389,9 @@ class DockerRuntime:
                     remaining = limit - len(destination)
 
                     if len(chunk) > remaining:
-                        destination.extend(chunk[:remaining])
+                        destination.extend(
+                            chunk[:remaining]
+                        )
                         overflow.set()
                         break
 
@@ -280,26 +403,59 @@ class DockerRuntime:
         execution_error = None
 
         try:
-            # 1. Container'ı oluştur. Bu aşamada worker çalışmaz.
-            self._create_container(
+            # -------------------------------------------------
+            # 1. CREATE
+            # Container oluşturulur.
+            # Worker henüz çalışmaz.
+            # -------------------------------------------------
+
+            container_id= self._create_container(
                 container_name=container_name,
                 policy=policy,
                 deadline=deadline,
             )
 
-            # 2. Oluşturma başarılıysa worker'ı başlat ve
-            #    stdin/stdout bağlantısını aç.
+            lifecycle.transition(
+                ContainerState.CREATED
+            )
+
+            if time.monotonic() >= deadline:
+                raise ContainerRuntimeError(
+                    "Container creation consumed the "
+                    "execution deadline; container startup "
+                    "was not attempted."
+                )
+
+            # -------------------------------------------------
+            # 2. STARTING
+            # Docker'a container'ı başlatma isteği
+            # gönderilmek üzere.
+            # -------------------------------------------------
+
+            lifecycle.transition(
+                ContainerState.STARTING
+            )
+
+            if container_id is None:
+                raise ContainerRuntimeError(
+                    "Container ID is unavailable after creation."
+                )
+
             process = launch_with_deadline(
                 command=[
                     "docker",
                     "start",
                     "-a",
                     "-i",
-                    container_name,
+                    container_id,
                 ],
                 deadline=deadline,
             )
 
+            # -------------------------------------------------
+            # 3. OUTPUT READERS
+            # stdout / stderr sınırlı olarak okunur.
+            # -------------------------------------------------
 
             stdout_thread = threading.Thread(
                 target=read_limited,
@@ -326,13 +482,20 @@ class DockerRuntime:
             stdout_thread.start()
             stderr_thread.start()
 
+            # -------------------------------------------------
+            # 4. REQUEST
+            # Worker'a request gönderilir.
+            # -------------------------------------------------
+
             write_with_deadline(
                 process=process,
                 data=request_bytes,
                 deadline=deadline,
             )
 
-        
+            # -------------------------------------------------
+            # 5. PROCESS MONITORING
+            # -------------------------------------------------
 
             while process.poll() is None:
                 if stdout_overflow.is_set():
@@ -352,14 +515,22 @@ class DockerRuntime:
 
                 time.sleep(0.05)
 
+            # -------------------------------------------------
+            # 6. OUTPUT THREADS
+            # -------------------------------------------------
+
             stdout_thread.join(
                 timeout=self.OUTPUT_GRACE_SECONDS
             )
+
             stderr_thread.join(
                 timeout=self.OUTPUT_GRACE_SECONDS
             )
 
-            if stdout_thread.is_alive() or stderr_thread.is_alive():
+            if (
+                stdout_thread.is_alive()
+                or stderr_thread.is_alive()
+            ):
                 raise ContainerRuntimeError(
                     "Container output streams did not finish."
                 )
@@ -374,6 +545,10 @@ class DockerRuntime:
                     "Container stderr exceeds size limit."
                 )
 
+            # -------------------------------------------------
+            # 7. EXIT CODE
+            # -------------------------------------------------
+
             if process.returncode != 0:
                 error_text = stderr_data.decode(
                     "utf-8",
@@ -385,64 +560,166 @@ class DockerRuntime:
                     f"{error_text}"
                 )
 
+            lifecycle.transition(
+                ContainerState.EXECUTED
+            )
+
         except ProcessLaunchTimeout as exc:
-            if not exc.handle.wait_until_finished(
-                timeout=self.CLEANUP_TIMEOUT_SECONDS
-            ):
+            launcher_finished = (
+                exc.handle.wait_until_finished(
+                    timeout=self.CLEANUP_TIMEOUT_SECONDS
+                )
+            )
+
+            if not launcher_finished:
                 execution_error = ContainerRuntimeError(
-                    "Docker CLI launch timed out and the "
+                    "Docker CLI launch timed out and its "
                     "launcher thread did not finish. "
-                    "Container cleanup cannot be guaranteed."
+                    "A delayed Docker operation may still "
+                    "complete after cleanup."
                 )
+
             else:
-                execution_error = ContainerRuntimeError(
-                    "Docker CLI launch exceeded its deadline."
+                inspect_target = (
+                    container_id
+                    if container_id is not None
+                    else container_name
                 )
+
+                try:
+                    docker_state = self._inspect_container_state(
+                        inspect_target
+                    )
+                except ContainerRuntimeError as inspect_exc:
+                    execution_error = ContainerRuntimeError(
+                        "Docker CLI launch exceeded its deadline "
+                        "and the resulting container state could "
+                        "not be verified: "
+                        f"{inspect_exc}"
+                    )
+                else:
+                    if docker_state is None:
+                        execution_error = ContainerRuntimeError(
+                            "Docker CLI launch exceeded its deadline. "
+                            "Docker reports that the container no "
+                            "longer exists."
+                        )
+
+                    else:
+                        execution_error = ContainerRuntimeError(
+                            "Docker CLI launch exceeded its deadline. "
+                            "Observed container state before cleanup: "
+                            f"{docker_state}."
+                        )
 
         except ProcessLaunchError as exc:
             execution_error = ContainerRuntimeError(
                 f"Docker CLI launch failed: {exc}"
             )
 
-        except (OSError, BrokenPipeError,ProcessIOError) as exc:
+        except (
+            OSError,
+            BrokenPipeError,
+            ProcessIOError,
+        ) as exc:
             execution_error = ContainerRuntimeError(
-                f"Container process communication failed: {exc}"
+                "Container process communication failed: "
+                f"{exc}"
             )
 
         except ContainerRuntimeError as exc:
             execution_error = exc
 
         finally:
+            # -------------------------------------------------
+            # 8. PROCESS TERMINATION
+            # -------------------------------------------------
+
             stop_reading.set()
 
             if process is not None:
                 try:
                     self._terminate_process(process)
+
                 except ContainerRuntimeError as exc:
                     if execution_error is None:
                         execution_error = exc
+                    else:
+                        execution_error = ContainerRuntimeError(
+                            f"{execution_error} "
+                            f"Process termination also failed: "
+                            f"{exc}"
+                        )
+
+            # -------------------------------------------------
+            # 9. CONTAINER CLEANUP
+            # -------------------------------------------------
+
+            lifecycle.transition(
+                ContainerState.CLEANING_UP
+            )
 
             try:
-                self._cleanup_container(container_name)
+                cleanup_target = (
+                    container_id
+                    if container_id is not None
+                    else container_name
+                )
+
+                self._cleanup_container(
+                    cleanup_target
+                )
+
             except ContainerRuntimeError as exc:
-                # Temizleme doğrulanamadıysa başarılı sonuç dönmeyiz.
-                execution_error = exc
+                lifecycle.transition(
+                    ContainerState.CLEANUP_UNVERIFIED
+                )
+
+                # Cleanup doğrulanamıyorsa başarılı sonuç
+                # dönmek güvenli değildir.
+                if execution_error is None:
+                    execution_error = exc
+
+                else:
+                    execution_error = ContainerRuntimeError(
+                        f"{execution_error} "
+                        "Container cleanup could not be "
+                        f"verified: {exc}"
+                    )
+
+            else:
+                lifecycle.transition(
+                    ContainerState.REMOVED
+                )
+
+        # -----------------------------------------------------
+        # 10. FAIL CLOSED
+        # -----------------------------------------------------
 
         if execution_error is not None:
             raise execution_error
+
+        # -----------------------------------------------------
+        # 11. RESPONSE VALIDATION
+        # -----------------------------------------------------
 
         try:
             response = WorkerResponse.model_validate_json(
                 bytes(stdout_data)
             )
+
         except ValidationError as exc:
             raise ContainerRuntimeError(
                 f"Invalid container response: {exc}"
             ) from exc
 
-        if response.scenario_name != validated_request.scenario_name:
+        if (
+            response.scenario_name
+            != validated_request.scenario_name
+        ):
             raise ContainerRuntimeError(
-                "Container response scenario does not match request."
+                "Container response scenario does not "
+                "match request."
             )
 
         return response.model_dump()

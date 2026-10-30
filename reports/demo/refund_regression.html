@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgentGuard | Regression Dashboard</title>
+<style>
+:root {
+    color-scheme: dark;
+    font-family: Inter, Segoe UI, Arial, sans-serif;
+}
+* { box-sizing: border-box; }
+body {
+    margin: 0;
+    background: #0b1220;
+    color: #e2e8f0;
+}
+main {
+    max-width: 1100px;
+    margin: 40px auto;
+    padding: 0 24px 60px;
+}
+h1 { font-size: 32px; margin-bottom: 8px; }
+h2 { font-size: 19px; margin: 0 0 18px; }
+.muted { color: #94a3b8; }
+.card {
+    background: #131e31;
+    border: 1px solid #26344c;
+    border-radius: 14px;
+    padding: 24px;
+    margin: 18px 0;
+    overflow-x: auto;
+}
+.grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+}
+.grid .card { margin: 0; }
+.success { color: #4ade80; }
+.danger { color: #fb7185; }
+.verdict { font-size: 28px; font-weight: 800; }
+.agent {
+    overflow-wrap: anywhere;
+    font-size: 14px;
+}
+table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+}
+th, td {
+    padding: 12px;
+    border-bottom: 1px solid #26344c;
+    vertical-align: top;
+}
+th { color: #94a3b8; }
+code {
+    color: #c4b5fd;
+    overflow-wrap: anywhere;
+}
+li {
+    padding: 8px 0;
+    overflow-wrap: anywhere;
+}
+@media (max-width: 650px) {
+    .grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<main>
+<h1>AgentGuard Regression Dashboard</h1>
+<p class="muted">Scenario: refund-order</p>
+
+<div class="card">
+    <div class="verdict danger">REGRESSION DETECTED</div>
+    <p class="muted">
+        Comparison of recorded local agent test runs.
+    </p>
+</div>
+
+<div class="grid">
+    <div class="card">
+        <h2>Baseline</h2>
+        <div class="verdict">PASS</div>
+        <p class="agent">GoodRefundAgent</p>
+        <p class="muted">
+            5 assertions ·
+            2 mutations ·
+            6 traces
+        </p>
+    </div>
+    <div class="card">
+        <h2>Candidate</h2>
+        <div class="verdict">FAIL</div>
+        <p class="agent">BadRefundAgent</p>
+        <p class="muted">
+            5 assertions ·
+            3 mutations ·
+            8 traces
+        </p>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Assertion Regressions</h2>
+    <ul><li>unchanged:customers.CUST-1: Unexpected mutation: [StateMutation(path=&#x27;customers.CUST-1.status&#x27;, mutation_type=&#x27;updated&#x27;, before=&#x27;active&#x27;, after=&#x27;deleted&#x27;)]</li></ul>
+</div>
+
+<div class="card">
+    <h2>New Tool Calls</h2>
+    <ul><li>customer.delete</li></ul>
+</div>
+
+<div class="card">
+    <h2>Additional State Mutations</h2>
+    <table><thead><tr><th>State path</th><th>Type</th><th>Before</th><th>After</th></tr></thead><tbody><tr><td><code>customers.CUST-1.status</code></td><td>updated</td><td><code>active</code></td><td><code>deleted</code></td></tr></tbody></table>
+</div>
+
+<div class="card">
+    <h2>Assertion Improvements</h2>
+    <p class='muted'>None detected</p>
+</div>
+
+<p class="muted">
+Comparison reflects the recorded scenario and assertions.
+It does not establish secure isolated execution.
+</p>
+</main>
+</body>
+</html>

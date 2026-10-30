@@ -24,6 +24,9 @@ class LaunchHandle:
     cancelled: threading.Event = field(
         default_factory=threading.Event
     )
+    late_process_terminated: threading.Event = field(
+        default_factory=threading.Event
+    )
 
     process: subprocess.Popen | None = None
     error: Exception | None = None
@@ -90,9 +93,9 @@ def launch_with_deadline(
                 try:
                     process.kill()
                     process.wait(timeout=5)
+                    handle.late_process_terminated.set()
                 finally:
                     close_streams(process)
-
         except Exception as exc:
             with handle._lock:
                 handle.error = exc

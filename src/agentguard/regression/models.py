@@ -16,6 +16,7 @@ RegressionType = Literal[
     "state_mutation_changed",
     "new_execution_error",
     "resolved_execution_error",
+    "candidate_run_not_verified",
 ]
 
 

@@ -6,6 +6,11 @@ from agentguard.core.trace import TraceEvent
 
 
 RunStatus= Literal["passed","failed","error"]
+CleanupStatus = Literal[
+    "not_required",
+    "verified",
+    "unverified",
+]
 
 class AssertionResult(BaseModel):
     name: str
@@ -31,6 +36,9 @@ class RunResult(BaseModel):
     )
 
     status: RunStatus = "passed"
+
+    cleanup_status: CleanupStatus = "not_required"
+
 
     error_type: str | None = None
     error_message: str | None = None

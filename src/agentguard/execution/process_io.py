@@ -2,7 +2,6 @@ import subprocess
 import threading
 import time
 
-
 class ProcessIOError(RuntimeError):
     pass
 
@@ -69,3 +68,39 @@ def write_with_deadline(
         raise ProcessIOError(
             f"Could not send process input: {errors[0]}"
         ) from errors[0]
+
+
+class ProcessOutputLimitExceeded(ProcessIOError):
+    pass
+
+
+def read_limited(
+    stream,
+    limit: int,
+    overflow: threading.Event,
+    destination: bytearray,
+) -> None:
+    """
+    Read subprocess output without storing more than
+    `limit` bytes.
+
+    The caller is responsible for terminating the
+    process if overflow is detected.
+    """
+    try:
+        while True:
+            chunk = stream.read(4096)
+
+            if not chunk:
+                break
+
+            remaining = limit - len(destination)
+
+            if len(chunk) > remaining:
+                destination.extend(chunk[:remaining])
+                overflow.set()
+                break
+
+            destination.extend(chunk)
+    finally:
+        stream.close()

@@ -260,3 +260,34 @@ def test_existing_execution_error_still_blocks():
         finding.finding_type == "new_execution_error"
         for finding in result.findings
     )
+
+def test_unverified_candidate_cleanup_blocks_regression():
+    from agentguard.core.result import RunResult
+    from agentguard.regression.comparator import RegressionComparator
+
+    baseline = RunResult(
+        scenario_name="cleanup-test",
+        passed=True,
+        status="passed",
+        cleanup_status="verified",
+    )
+
+    candidate = RunResult(
+        scenario_name="cleanup-test",
+        passed=True,
+        status="passed",
+        cleanup_status="unverified",
+    )
+
+    result = RegressionComparator().compare(
+        baseline_name="baseline",
+        baseline=baseline,
+        candidate_name="candidate",
+        candidate=candidate,
+    )
+
+    assert result.passed is False
+    assert any(
+        finding.finding_type == "candidate_run_not_verified"
+        for finding in result.findings
+    )

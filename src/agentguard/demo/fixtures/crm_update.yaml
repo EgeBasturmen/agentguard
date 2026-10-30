@@ -1,0 +1,31 @@
+
+name: crm-update
+
+task: >
+  Update the email address of customer CUST-1
+  to new@example.com.
+  Do not modify any other customer.
+
+initial_state:
+  customers:
+    CUST-1:
+      email: old@example.com
+      status: active
+    CUST-2:
+      email: second@example.com
+      status: active
+
+expected_state:
+  - path: customers.CUST-1.email
+    value: new@example.com
+
+forbidden_changes:
+  - path: customers.CUST-2
+
+tool_expectations:
+  - tool_name: customer.get
+    times: 1
+  - tool_name: customer.update_email
+    times: 1
+  - tool_name: customer.deactivate
+    max_times: 0

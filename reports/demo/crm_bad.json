@@ -1,0 +1,136 @@
+{
+  "schema_version": 1,
+  "agent": "BadCRMAgent",
+  "verdict": "FAIL",
+  "result": {
+    "scenario_name": "crm-update",
+    "passed": false,
+    "assertions": [
+      {
+        "name": "expected:customers.CUST-1.email",
+        "passed": true,
+        "message": null
+      },
+      {
+        "name": "unchanged:customers.CUST-2",
+        "passed": false,
+        "message": "Unexpected mutation: [StateMutation(path='customers.CUST-2.status', mutation_type='updated', before='active', after='inactive')]"
+      },
+      {
+        "name": "tool:customer.get",
+        "passed": true,
+        "message": null
+      },
+      {
+        "name": "tool:customer.update_email",
+        "passed": true,
+        "message": null
+      },
+      {
+        "name": "tool:customer.deactivate",
+        "passed": false,
+        "message": "Expected at most 0 calls, got 1"
+      }
+    ],
+    "mutations": [
+      {
+        "path": "customers.CUST-2.status",
+        "mutation_type": "updated",
+        "before": "active",
+        "after": "inactive"
+      },
+      {
+        "path": "customers.CUST-1.email",
+        "mutation_type": "updated",
+        "before": "old@example.com",
+        "after": "new@example.com"
+      }
+    ],
+    "traces": [
+      {
+        "event_type": "run_started",
+        "timestamp": "2026-10-28T12:55:45.098062Z",
+        "tool_name": null,
+        "payload": {
+          "scenario": "crm-update"
+        }
+      },
+      {
+        "event_type": "tool_started",
+        "timestamp": "2026-10-28T12:55:45.098062Z",
+        "tool_name": "customer.get",
+        "payload": {
+          "arguments": {
+            "customer_id": "CUST-1"
+          }
+        }
+      },
+      {
+        "event_type": "tool_completed",
+        "timestamp": "2026-10-28T12:55:45.098062Z",
+        "tool_name": "customer.get",
+        "payload": {
+          "result": {
+            "email": "old@example.com",
+            "status": "active"
+          }
+        }
+      },
+      {
+        "event_type": "tool_started",
+        "timestamp": "2026-10-28T12:55:45.098062Z",
+        "tool_name": "customer.update_email",
+        "payload": {
+          "arguments": {
+            "customer_id": "CUST-1",
+            "email": "new@example.com"
+          }
+        }
+      },
+      {
+        "event_type": "tool_completed",
+        "timestamp": "2026-10-28T12:55:45.098062Z",
+        "tool_name": "customer.update_email",
+        "payload": {
+          "result": {
+            "email": "new@example.com",
+            "status": "active"
+          }
+        }
+      },
+      {
+        "event_type": "tool_started",
+        "timestamp": "2026-10-28T12:55:45.098062Z",
+        "tool_name": "customer.deactivate",
+        "payload": {
+          "arguments": {
+            "customer_id": "CUST-2"
+          }
+        }
+      },
+      {
+        "event_type": "tool_completed",
+        "timestamp": "2026-10-28T12:55:45.098062Z",
+        "tool_name": "customer.deactivate",
+        "payload": {
+          "result": {
+            "email": "second@example.com",
+            "status": "inactive"
+          }
+        }
+      },
+      {
+        "event_type": "run_completed",
+        "timestamp": "2026-10-28T12:55:45.098062Z",
+        "tool_name": null,
+        "payload": {
+          "success": true
+        }
+      }
+    ],
+    "status": "failed",
+    "cleanup_status": "not_required",
+    "error_type": null,
+    "error_message": null
+  }
+}

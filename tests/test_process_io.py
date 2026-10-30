@@ -88,3 +88,25 @@ def test_write_with_deadline_rejects_missing_stdin():
             data=b"test",
             deadline=time.monotonic() + 1,
         )
+
+import io
+import threading
+
+from agentguard.execution.process_io import read_limited
+
+
+def test_read_limited_stops_at_output_limit():
+    stream = io.BytesIO(b"1234567890")
+    destination = bytearray()
+    overflow = threading.Event()
+
+    read_limited(
+        stream=stream,
+        limit=5,
+        overflow=overflow,
+        destination=destination,
+    )
+
+    assert bytes(destination) == b"12345"
+    assert overflow.is_set()
+    assert stream.closed

@@ -1,8 +1,23 @@
+# Python
 venv/
 .venv/
 __pycache__/
 *.py[cod]
 .pytest_cache/
+*.egg-info/
+build/
+dist/
+
+# Secrets
 .env
 .env.*
-!.env.example
+
+# Generated reports
+reports/*
+!reports/demo/
+!reports/demo/**
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
