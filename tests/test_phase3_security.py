@@ -106,3 +106,10 @@ def test_sealed_report_cannot_accept_an_unsupported_tool_schema(schema):
         'modes':['simulator'],'required_capabilities':[]}
     body['fingerprint']=hashlib.sha256(canonical_json(body).encode()).hexdigest()
     with pytest.raises(ValueError): IntegrationEvidence.model_validate(body)
+
+
+def test_container_context_does_not_claim_python_source_provenance():
+    from agentguard.contracts.compatibility import controlled_context
+    context=controlled_context('container.ipc')
+    assert any('prebuilt' in message.lower() and 'provenance' in message.lower() for message in context.limitations)
+    assert not any('Only explicitly included Python' in message for message in context.limitations)

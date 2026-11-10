@@ -239,3 +239,15 @@ Son şema düzeltmesiyle yerel tam koşu: **496 passed**, 135.72 saniye;
 299 unit, 168 integration, 29 gerçek Docker; failure/error/skip yok. Temiz wheel
 runtime-only kurulumundan kontrollü execution, Phase 3 integration CLI ve rapor
 roundtrip yeniden başarılı. Phase 0–2'nin 448 testi korunur; toplam 48 yeni Phase 3 case'i vardır.
+
+Prebuilt container rapor sınırı ayrıca netleştirildi: language-neutral image profili,
+Python-source/stdlib provenance iddiasını kullanmaz; image/source/dependency provenance
+hakkındaki bilinmezliği kendi context limitation alanında açıkça belirtir. Python kaynak
+adapter'ının mevcut limitation metni korunur. Bu ayrım için bir regresyon testi eklendi.
+
+Son provenance ayrımıyla tam yerel doğrulama: **497 passed**, 129.56 saniye;
+300 unit, 168 integration ve 29 gerçek Docker. Temiz runtime-only wheel ve Phase 3
+integration CLI yeniden başarılı. Phase 0–2'nin 448 testi korunur; 49 yeni case vardır.
+Şema güvenliği kaynak commit'i `7973f55c122e1c30c09f1d69a48116fa4d12a301` için
+[CI 42866812450](https://github.com/EgeBasturmen/agentguard/actions/runs/42866812450)
+13/13 başarılı tamamlandı. Son provenance metadata commit'inin CI sonucu nihai kapanışa işlenecektir.

@@ -28,7 +28,8 @@ def controlled_context(adapter_id="python.container") -> ExecutionContext:
         capabilities=controlled_capabilities(), limitations=[
             "Authoritative evidence covers only trusted broker simulator state and instrumented tool calls.",
             "Docker shares the host kernel; this is not a VM or a hostile multi-tenant boundary.",
-            "Only explicitly included Python source and standard-library dependencies are supported.",
+            ("Only explicitly included Python source and standard-library dependencies are supported."
+             if adapter_id == "python.container" else "Pinned prebuilt container image: source/dependency provenance is not verified."),
             "Worker completion/output are untrusted claims; verdicts are computed by the controller.",
         ])
 
