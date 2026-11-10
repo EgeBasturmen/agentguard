@@ -130,8 +130,8 @@ Phase 3 testi eklendi. Yeni testsupport dosyaları sdist manifest'ine açıkça 
 temiz paket kontrolü kaynak dağıtımında conftest/helper varlığını da doğrular.
 
 Yerel kanıtlar `artifacts/phase3-tests.xml`, `artifacts/phase3-build.log`,
-`artifacts/phase3-wheel-check.json` içindedir ve Git'e eklenmez. Kaynak commit ve
-uzak CI artifact doğrulaması başarıyla tamamlanmadan nihai Phase 3 kapanışı yapılmaz.
+`artifacts/phase3-wheel-check.json` içindedir ve Git'e eklenmez. Kaynak commit ve uzak CI artifact doğrulaması aşağıda kaydedildi.
+Nihai Phase 3 kapanışı yalnızca bu doğrulama başarıyla tamamlandıktan sonra işlendi.
 Phase 4 başlatılmadı.
 
 ## Bilinen sınırlar
@@ -189,3 +189,35 @@ kapsamıdır. Image cache retention ve controller crash orphan reconciliation h�
 - `tests/test_phase3_environments.py`
 - `tests/test_phase3_integration.py`
 - `tests/test_phase3_security.py`
+
+## Doğrulanmış CI ve kapanış
+
+- Dal: `codex/development`; mevcut checkout kullanıldı, yeni repo kopyası yoktur.
+- Doğrulanmış Phase 2 atası: `37e3638dc6c65681df332251eb912887cac424c7`.
+- Phase 3 kaynak commit'i: `ea2f0e567fd684551ae5d7f5e4077dbfce3478b3`.
+- [GitHub Actions koşusu 42854247327](https://github.com/EgeBasturmen/agentguard/actions/runs/42854247327):
+  **completed/success, 13/13 job başarılı**; başarısız job yok.
+
+| CI grubu | Sonuç | Kanıt |
+| --- | --- | --- |
+| workflow-lint | Başarılı | actionlint |
+| Ubuntu 24.04 × Python 3.10–3.14 | 5/5 başarılı | Her hücrede 295 unit + 168 integration; isolated sdist→wheel ve temiz runtime kurulum |
+| Windows 2022 × Python 3.10–3.14 | 5/5 başarılı | Her hücrede 295 unit + 168 integration; isolated sdist→wheel ve temiz runtime kurulum |
+| docker | Başarılı | 29 gerçek Docker testi; temiz wheel'den Phase 2 yürütmesi + Phase 3 integration CLI/filesystem agent ve rapor roundtrip |
+| Phase 1 gate (korunan mevcut job adı) | Başarılı | Bütün lint/matrix/Docker işlerinin başarısını zorunlu kılar |
+
+11 artifact indirildi ve içerikleri kontrol edildi. 21 JUnit XML kaydında failure/error/
+skip sıfır. 11 wheel-check JSON kaydı runtime-only, checkout dışı console CLI ve verdict
+parity doğruladı; Docker kaydında `controlled_docker=true` ve `phase3_integration=true`.
+Kaynak dağıtımında yeni test helper/conftest bulunması temiz paket kontrolünün parçasıdır.
+
+Main GitHub referansı `d5673ea29aa4ec63938d33b16a46ef714191e23a`, Phase 2 referansı
+`37e3638dc6c65681df332251eb912887cac424c7` olarak kaldı. Özgün HEAD/branch/index/status,
+kullanıcı dosyaları ve bu checkout'taki mevcut demo raporlarının hash kontrolleri başarılı.
+Hassas dosya/anahtar taraması yapıldı; test ortamı, model/image cache, indirilen CI ZIP'leri
+ve yerel test artifact'leri Git'e eklenmedi. Source commit 39 gerekli dosyayı içerir.
+
+Kalıcı geliştirme bu aynı checkout ve `codex/development` dalından devam edebilir.
+Kapanış kaydı gerçek CI başarısından sonra ayrı docs commit'iyle yayımlanır; bu doküman
+bağımsız bir pentest veya genel güvenlik sertifikası değildir. Destek profili dışındaki
+özellikler yukarıda açıkça sınırlanmıştır. Phase 4 için kullanıcı onayı beklenir.
