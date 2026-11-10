@@ -117,22 +117,28 @@ hatası transactional process sınırından typed cleanup hatası olarak taşın
 
 ## Test ve CI kanıtı
 
-İlk red testler eksik network policy/routing/environment sınıflarını gösterdi.
-Yeni CLI komutunun yokluğu gerçek CliRunner testinde yeniden üretildi.
-Ek red→green güvenlik testleri strict grant/approval, link-local metadata engeli ve
-endpoint/operation değişiminde fingerprint farklılığını doğruladı. Testler yalnızca
-mock transport'a dayanmaz: ThreadingHTTPServer üzerinde gerçek servis/agent/MCP,
-gerçek filesystem/dataset ve Docker içinden broker çağrıları kullanılır.
+Son tam yerel koşu: **497 passed**, 129.56 saniye; 300 unit, 168 integration,
+29 gerçek Docker; failure/error/skip yok. Phase 0–2'nin 448 testi korunur; 49 yeni
+Phase 3 case'i eklendi. Kaynak dağıtımında yeni test helper/conftest bulunması ve
+runtime-only temiz wheel kurulumu ayrıca doğrulandı.
 
-Son kaynak koşusu: **492 passed**, 157.99 saniye; 295 unit, 168 integration,
-29 gerçek Docker; failure/error/skip yok. Phase 0–2'nin 448 testi korunur; 44 yeni
-Phase 3 testi eklendi. Yeni testsupport dosyaları sdist manifest'ine açıkça eklendi;
-temiz paket kontrolü kaynak dağıtımında conftest/helper varlığını da doğrular.
+Testler yalnızca mock transport'a dayanmaz: gerçek TCP HTTP agent/OpenAPI/MCP servisi,
+filesystem/dataset, container içinden broker çağrıları ve non-Python shell worker kullanılır.
+Kaynak keşif eksikliği ve yeni CLI komutunun yokluğu önce başarısız testlerle gösterildi.
+Strict grants/replay approval, link-local metadata engeli, endpoint/operation identity,
+replay miss/version, mock business-state reddi, capability gaps, MCP session cleanup ve
+kararlı provisioning-independent fingerprint red→green regresyonlarıyla doğrulandı.
 
-Yerel kanıtlar `artifacts/phase3-tests.xml`, `artifacts/phase3-build.log`,
-`artifacts/phase3-wheel-check.json` içindedir ve Git'e eklenmez. Kaynak commit ve uzak CI artifact doğrulaması aşağıda kaydedildi.
-Nihai Phase 3 kapanışı yalnızca bu doğrulama başarıyla tamamlandıktan sonra işlendi.
-Phase 4 başlatılmadı.
+Nested `$id` ile `$ref` scope'unun değişmesi ayrıca referans Draft202012Validator ile
+karşılaştırılarak gösterildi. Desteklenmeyen resource identifiers/anchors/vocabulary ve
+bilinmeyen dialect artık reddedilir. Sealed report içindeki tool schema da aynı sınırlardan
+geçer; malformed schema validation error'a normalize edilir, gate'i çökertmez. Opaque
+prebuilt image profili Python-source provenance iddiası kullanmaz.
+
+Temiz wheel'den gerçek console CLI, Phase 2 controlled execution ve Phase 3
+integration CLI→Docker→gerçek filesystem agent, verified cleanup ve rapor roundtrip
+başarılı. Yerel evidence `artifacts/phase3-tests.xml`, `artifacts/phase3-build.log` ve
+`artifacts/phase3-wheel-check.json` içindedir; Git'e eklenmez.
 
 ## Bilinen sınırlar
 
@@ -192,62 +198,34 @@ kapsamıdır. Image cache retention ve controller crash orphan reconciliation h�
 
 ## Doğrulanmış CI ve kapanış
 
-- Dal: `codex/development`; mevcut checkout kullanıldı, yeni repo kopyası yoktur.
+- Kalıcı dal: `codex/development`; mevcut checkout kullanıldı, yeni repo kopyası yoktur.
 - Doğrulanmış Phase 2 atası: `37e3638dc6c65681df332251eb912887cac424c7`.
-- Phase 3 kaynak commit'i: `ea2f0e567fd684551ae5d7f5e4077dbfce3478b3`.
-- [GitHub Actions koşusu 42854247327](https://github.com/EgeBasturmen/agentguard/actions/runs/42854247327):
-  **completed/success, 13/13 job başarılı**; başarısız job yok.
+- İlk uygulama commit'i: `ea2f0e567fd684551ae5d7f5e4077dbfce3478b3`.
+- Şema güvenliği düzeltmesi: `7973f55c122e1c30c09f1d69a48116fa4d12a301`.
+- Nihai kaynak/provenance commit'i: `0ce264784a97bf38d65d4068574b11720c713b5f`.
+- [Nihai kaynak CI koşusu 42897469627](https://github.com/EgeBasturmen/agentguard/actions/runs/42897469627):
+  **completed/success, 13/13 başarılı**. Önceki uygulama ve şema düzeltmesi CI'ları da başarılıdır.
 
 | CI grubu | Sonuç | Kanıt |
 | --- | --- | --- |
 | workflow-lint | Başarılı | actionlint |
-| Ubuntu 24.04 × Python 3.10–3.14 | 5/5 başarılı | Her hücrede 295 unit + 168 integration; isolated sdist→wheel ve temiz runtime kurulum |
-| Windows 2022 × Python 3.10–3.14 | 5/5 başarılı | Her hücrede 295 unit + 168 integration; isolated sdist→wheel ve temiz runtime kurulum |
+| Ubuntu 24.04 × Python 3.10–3.14 | 5/5 başarılı | Her hücrede 300 unit + 168 integration; isolated sdist→wheel ve temiz runtime kurulum |
+| Windows 2022 × Python 3.10–3.14 | 5/5 başarılı | Her hücrede 300 unit + 168 integration; isolated sdist→wheel ve temiz runtime kurulum |
 | docker | Başarılı | 29 gerçek Docker testi; temiz wheel'den Phase 2 yürütmesi + Phase 3 integration CLI/filesystem agent ve rapor roundtrip |
 | Phase 1 gate (korunan mevcut job adı) | Başarılı | Bütün lint/matrix/Docker işlerinin başarısını zorunlu kılar |
 
 11 artifact indirildi ve içerikleri kontrol edildi. 21 JUnit XML kaydında failure/error/
 skip sıfır. 11 wheel-check JSON kaydı runtime-only, checkout dışı console CLI ve verdict
 parity doğruladı; Docker kaydında `controlled_docker=true` ve `phase3_integration=true`.
-Kaynak dağıtımında yeni test helper/conftest bulunması temiz paket kontrolünün parçasıdır.
+Önceki kaynak CI kanıtları, nihai kaynak yerine kullanılmadı; son kaynak kendi kanıtıyla kapatıldı.
 
-Main GitHub referansı `d5673ea29aa4ec63938d33b16a46ef714191e23a`, Phase 2 referansı
+GitHub main `d5673ea29aa4ec63938d33b16a46ef714191e23a`, Phase 2 referansı
 `37e3638dc6c65681df332251eb912887cac424c7` olarak kaldı. Özgün HEAD/branch/index/status,
 kullanıcı dosyaları ve bu checkout'taki mevcut demo raporlarının hash kontrolleri başarılı.
-Hassas dosya/anahtar taraması yapıldı; test ortamı, model/image cache, indirilen CI ZIP'leri
-ve yerel test artifact'leri Git'e eklenmedi. Source commit 39 gerekli dosyayı içerir.
+Hassas dosya/anahtar taraması yapıldı; venv, model/image cache ve CI/test artifact'leri
+Git'e eklenmedi. Bu fazın 39 gerekli değişen dosyası yukarıda listelenmiştir.
 
-Kalıcı geliştirme bu aynı checkout ve `codex/development` dalından devam edebilir.
-Kapanış kaydı gerçek CI başarısından sonra ayrı docs commit'iyle yayımlanır; bu doküman
-bağımsız bir pentest veya genel güvenlik sertifikası değildir. Destek profili dışındaki
-özellikler yukarıda açıkça sınırlanmıştır. Phase 4 için kullanıcı onayı beklenir.
-
-## Son şema güvenliği regresyonu
-
-Kapanış sonrası ek sınır kontrolünde nested `$id` ile yerel `$ref` scope'unun farklı
-bir schema resource'a geçebilmesi yeniden üretildi: referans Draft202012Validator'un
-reddettiği veri, eski flatten işlemi tarafından kabul edilebiliyordu. Önce başarısız
-test yazıldı. Resource-scoped `$id`/anchor/vocabulary profili ve bilinmeyen `$schema`
-dialect'i artık açıkça reddedilir. Typed report envelope da tool şemalarını aynı
-sınırlarla yeniden doğrular; önceden sealed bir hash bu reddi geçersiz kılamaz.
-
-Dört yeni red→green regresyon case’i eklendi (resource scope, dialect ve iki sealed-report şema durumu). Bozuk JSON Schema hatası da validation error olarak normalize edilir; gate çökmesi yerine reddedilir. Son kaynak için tam test, temiz wheel ve
-GitHub CI doğrulaması yeniden çalıştırılıyor; nihai kapanış bu son commit'in kanıtını
-bekler. Önceki CI tablosu kendi kaynak commit'inin tarihsel kanıtıdır.
-
-Son şema düzeltmesiyle yerel tam koşu: **496 passed**, 135.72 saniye;
-299 unit, 168 integration, 29 gerçek Docker; failure/error/skip yok. Temiz wheel
-runtime-only kurulumundan kontrollü execution, Phase 3 integration CLI ve rapor
-roundtrip yeniden başarılı. Phase 0–2'nin 448 testi korunur; toplam 48 yeni Phase 3 case'i vardır.
-
-Prebuilt container rapor sınırı ayrıca netleştirildi: language-neutral image profili,
-Python-source/stdlib provenance iddiasını kullanmaz; image/source/dependency provenance
-hakkındaki bilinmezliği kendi context limitation alanında açıkça belirtir. Python kaynak
-adapter'ının mevcut limitation metni korunur. Bu ayrım için bir regresyon testi eklendi.
-
-Son provenance ayrımıyla tam yerel doğrulama: **497 passed**, 129.56 saniye;
-300 unit, 168 integration ve 29 gerçek Docker. Temiz runtime-only wheel ve Phase 3
-integration CLI yeniden başarılı. Phase 0–2'nin 448 testi korunur; 49 yeni case vardır.
-Şema güvenliği kaynak commit'i `7973f55c122e1c30c09f1d69a48116fa4d12a301` için
-[CI 42866812450](https://github.com/EgeBasturmen/agentguard/actions/runs/42866812450)
-13/13 başarılı tamamlandı. Son provenance metadata commit'inin CI sonucu nihai kapanışa işlenecektir.
+Kalıcı geliştirme bu aynı checkout ve `codex/development` dalından devam eder.
+Nihai kapanış dokümantasyonu gerçek CI başarısından sonra ayrı commit'le yayımlanır.
+Bu sonuç bağımsız bir pentest veya genel güvenlik sertifikası değildir; destek profili
+dışındaki özellikler açıkça sınırlıdır. Phase 4 için kullanıcı onayı beklenir.
