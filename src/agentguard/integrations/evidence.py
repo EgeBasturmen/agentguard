@@ -19,6 +19,8 @@ class IntegrationEvidence(BaseModel):
         body=self.model_dump(exclude={'fingerprint'})
         actual=hashlib.sha256(canonical_json(body).encode()).hexdigest()
         if actual!=self.fingerprint: raise ValueError('Integration manifest fingerprint mismatch')
+        from agentguard.integrations.tools import ToolContract
+        for row in self.tools: ToolContract.model_validate(row['contract']).fingerprint()
         modes=sorted({row['mode'] for row in self.tools}) if self.tools else ['staging' if self.agent_transport=='http' else 'simulator']
         if modes!=self.modes: raise ValueError('Integration route modes are inconsistent')
         return self

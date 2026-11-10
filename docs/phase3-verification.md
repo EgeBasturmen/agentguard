@@ -88,7 +88,7 @@ SDK'dan kullanılabilir. Contract probe gerçek provision/snapshot/reset/cleanup
   Private/loopback host'lar exact grant gerektirir. Link-local/metadata, multicast ve
   unspecified adresler grant verilse de reddedilir. Plain HTTP ayrı boolean grant ister.
 - Remote schema/ref indirme, credential/header injection ve kullanıcı Dockerfile build'i
-  yoktur. JSON Schema 2020-12 runtime validator'u kullanılır; regex/dynamic refs güvenlik
+  yoktur. JSON Schema 2020-12 runtime validator'u kullanılır; regex/dynamic refs/resource-scoped identifiers/anchors ve bilinmeyen dialect güvenlik
   nedeniyle reddedilir. HTTP/message/schema/state boyutları ve süreleri bounded'dır.
 - State gerçek environment observer'dan alınır. Worker veya remote HTTP agent'ın
   state/trace/PASS beyanı kabul edilmez. HTTP agent için tool assertion/interception
@@ -221,3 +221,21 @@ Kalıcı geliştirme bu aynı checkout ve `codex/development` dalından devam ed
 Kapanış kaydı gerçek CI başarısından sonra ayrı docs commit'iyle yayımlanır; bu doküman
 bağımsız bir pentest veya genel güvenlik sertifikası değildir. Destek profili dışındaki
 özellikler yukarıda açıkça sınırlanmıştır. Phase 4 için kullanıcı onayı beklenir.
+
+## Son şema güvenliği regresyonu
+
+Kapanış sonrası ek sınır kontrolünde nested `$id` ile yerel `$ref` scope'unun farklı
+bir schema resource'a geçebilmesi yeniden üretildi: referans Draft202012Validator'un
+reddettiği veri, eski flatten işlemi tarafından kabul edilebiliyordu. Önce başarısız
+test yazıldı. Resource-scoped `$id`/anchor/vocabulary profili ve bilinmeyen `$schema`
+dialect'i artık açıkça reddedilir. Typed report envelope da tool şemalarını aynı
+sınırlarla yeniden doğrular; önceden sealed bir hash bu reddi geçersiz kılamaz.
+
+Dört yeni red→green regresyon case’i eklendi (resource scope, dialect ve iki sealed-report şema durumu). Bozuk JSON Schema hatası da validation error olarak normalize edilir; gate çökmesi yerine reddedilir. Son kaynak için tam test, temiz wheel ve
+GitHub CI doğrulaması yeniden çalıştırılıyor; nihai kapanış bu son commit'in kanıtını
+bekler. Önceki CI tablosu kendi kaynak commit'inin tarihsel kanıtıdır.
+
+Son şema düzeltmesiyle yerel tam koşu: **496 passed**, 135.72 saniye;
+299 unit, 168 integration, 29 gerçek Docker; failure/error/skip yok. Temiz wheel
+runtime-only kurulumundan kontrollü execution, Phase 3 integration CLI ve rapor
+roundtrip yeniden başarılı. Phase 0–2'nin 448 testi korunur; toplam 48 yeni Phase 3 case'i vardır.

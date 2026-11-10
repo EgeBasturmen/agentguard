@@ -77,3 +77,32 @@ def test_staging_approval_is_not_coerced_from_text():
     from agentguard.integrations.tools import ToolContract,RoutedTool
     contract=ToolContract(name='x',version='1.0.0',adapter='custom@1.0.0',input_schema={'type':'object'})
     with pytest.raises(ValueError): RoutedTool(contract,mode='staging',approved_effect='false')
+
+
+def test_nested_schema_resource_cannot_change_local_ref_meaning():
+    from jsonschema import Draft202012Validator,ValidationError
+    from agentguard.integrations.schema import validate
+    schema={'type':'object','$defs':{'value':{'type':'integer'}},'properties':{
+        'nested':{'$id':'https://schemas.example/nested','type':'object','$defs':{'value':{'type':'string'}},
+                  'properties':{'value':{'$ref':'#/$defs/value'}},'required':['value']}},'required':['nested']}
+    value={'nested':{'value':1}}
+    with pytest.raises(ValidationError): Draft202012Validator(schema).validate(value)
+    # This resource-scoped reference profile must be rejected, never flattened against the wrong root.
+    with pytest.raises(ValueError): validate(schema,value)
+
+
+def test_unknown_schema_dialect_is_rejected_instead_of_reinterpreted():
+    from agentguard.integrations.schema import validate
+    with pytest.raises(ValueError): validate({'$schema':'https://schemas.example/custom-dialect','type':'integer'},1)
+
+
+@pytest.mark.parametrize('schema',[{'$id':'https://schemas.example/nested','type':'object'},{'type':123}])
+def test_sealed_report_cannot_accept_an_unsupported_tool_schema(schema):
+    import hashlib
+    from agentguard.core.manifest import canonical_json
+    from agentguard.integrations.evidence import IntegrationEvidence
+    body={'schema_version':1,'agent_transport':'python','environment':{'kind':'memory'},
+        'tools':[{'contract':{'name':'x','version':'1.0.0','adapter':'custom@1.0.0','input_schema':schema},'mode':'simulator'}],
+        'modes':['simulator'],'required_capabilities':[]}
+    body['fingerprint']=hashlib.sha256(canonical_json(body).encode()).hexdigest()
+    with pytest.raises(ValueError): IntegrationEvidence.model_validate(body)

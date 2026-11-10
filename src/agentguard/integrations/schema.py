@@ -11,6 +11,10 @@ def resolve_schema(schema,document=None,depth=0,seen=()):
     if depth>24: raise ValueError('Schema depth/cycle limit exceeded')
     if isinstance(schema,list): return [resolve_schema(v,document,depth+1,seen) for v in schema]
     if not isinstance(schema,dict): return deepcopy(schema)
+    if any(key in schema for key in ('$id','$anchor','$dynamicAnchor','$vocabulary')):
+        raise ValueError('Resource-scoped schema identifiers/anchors/vocabularies are unsupported')
+    if '$schema' in schema and schema['$schema'] not in ('https://json-schema.org/draft/2020-12/schema','https://spec.openapis.org/oas/3.1/dialect/base'):
+        raise ValueError('Only pinned JSON Schema 2020-12/OpenAPI 3.1 dialects are supported')
     if '$dynamicRef' in schema or 'pattern' in schema or 'patternProperties' in schema:
         raise ValueError('Dynamic refs/regex schema keywords are unsupported')
     if '$ref' in schema:
@@ -28,7 +32,8 @@ def resolve_schema(schema,document=None,depth=0,seen=()):
 def check_schema(schema):
     if len(canonical_json(schema).encode())>65536: raise ValueError('Schema too large')
     schema=resolve_schema(schema,schema)
-    Draft202012Validator.check_schema(schema)
+    try: Draft202012Validator.check_schema(schema)
+    except Exception as exc: raise ValueError("Invalid JSON Schema document") from exc
     return schema
 
 
