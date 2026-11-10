@@ -25,7 +25,7 @@ from agentguard.adapters.sandbox import (
 from agentguard.sandbox.commerce import CommerceSandbox
 
 from agentguard.reporting.export import (
-    effective_pass,
+    export_comparison_json,
     export_html,
     export_json,
 )
@@ -78,10 +78,19 @@ def render_report(
 
     if result.status == "error":
         console.print(
-            "[bold red]Agent execution error:[/bold red] "
+            f"[bold red]Run error ({result.error_stage or 'unknown'}):[/bold red] "
             f"{result.error_type}: {result.error_message}"
         )
 
+    console.print(f"[bold]Evaluation status:[/bold] {result.evaluation_status}")
+    mode = result.execution_context.execution_mode if result.execution_context else "unknown"
+    console.print(f"[bold]Execution assurance:[/bold] {mode}")
+    console.print("[bold]Policy enforcement:[/bold] unknown (no isolation guarantee)")
+    if result.evaluation_error_type is not None:
+        console.print(
+            f"Evaluation error: {result.evaluation_error_type}: "
+            f"{result.evaluation_error_message}"
+        )
     console.print()
 
     table = Table(title="Safety Checks")
@@ -149,7 +158,7 @@ def render_report(
 
         if result.status == "error":
             reasons.append(
-                "Agent execution failed."
+                "Run execution or evaluation failed."
             )
         elif result.status != "passed":
             reasons.append(
@@ -160,6 +169,11 @@ def render_report(
             reasons.append(
                 "Container cleanup could not be verified."
             )
+
+        if result.evaluation_status != "complete":
+            reasons.append(f"Evaluation is {result.evaluation_status}.")
+        if not result.assertions:
+            reasons.append("No evaluation checks were recorded.")
 
         if not result.passed and not reasons:
             reasons.append(
@@ -237,6 +251,9 @@ def render_regression_report(
     console.print(table)
     console.print()
 
+    console.print(f"Comparison status: {result.comparison_status}")
+    console.print(f"No regression: {result.no_regression}")
+
     if result.passed:
         console.print(
             Panel(
@@ -250,7 +267,8 @@ def render_regression_report(
             Panel(
                 "[bold red]BLOCK[/bold red]\n"
                 f"{result.blocking_regressions} "
-                "blocking regression finding(s) detected.",
+                "blocking regression finding(s) detected.\n"
+                + "\n".join(result.failure_reasons),
                 title="Regression Verdict",
             )
         )
@@ -390,6 +408,8 @@ def regression_command(
         "--sandbox",
         help="Python sandbox reference.",
     ),
+    html_report: Path | None = typer.Option(None, "--html-report"),
+    json_report: Path | None = typer.Option(None, "--json-report"),
 ) -> None:
 
     try:
@@ -445,6 +465,11 @@ def regression_command(
 
     render_regression_report(regression_result)
 
+    if html_report is not None:
+        export_comparison_html(regression_result, html_report)
+    if json_report is not None:
+        export_comparison_json(regression_result, json_report)
+
     if not regression_result.passed:
         raise typer.Exit(code=1)
 
@@ -464,6 +489,7 @@ def compare_command(
         "--html-report",
         help="Destination for the regression dashboard.",
     ),
+    json_report: Path | None = typer.Option(None, "--json-report"),
 ):
     """Compare two agent runs and export an HTML dashboard."""
 
@@ -485,33 +511,13 @@ def compare_command(
         typer.echo(f"Comparison error: {exc}", err=True)
         raise typer.Exit(code=2)
 
-    if comparison["regression_detected"]:
-        console.print("[bold red]REGRESSION DETECTED[/bold red]")
-    else:
-        console.print("[bold green]NO REGRESSION DETECTED[/bold green]")
-
-    console.print(f"Scenario: {comparison['scenario']}")
-    console.print(
-        f"Baseline: {comparison['baseline_verdict']} "
-        f"({comparison['baseline_agent']})"
-    )
-    console.print(
-        f"Candidate: {comparison['candidate_verdict']} "
-        f"({comparison['candidate_agent']})"
-    )
-
-    for regression in comparison["assertion_regressions"]:
-        console.print(
-            f"[red]FAIL[/red] {regression['name']}"
-        )
-
-    for tool in comparison["added_tools"]:
-        console.print(f"[yellow]New tool:[/yellow] {tool}")
-
+    render_regression_report(comparison)
     console.print(f"HTML dashboard: {report_path}")
-
-    if comparison["regression_detected"]:
+    if json_report is not None:
+        export_comparison_json(comparison, json_report)
+    if not comparison.passed:
         raise typer.Exit(code=1)
+
 
 @app.command("demo")
 def demo_command(

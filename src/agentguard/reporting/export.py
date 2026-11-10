@@ -10,6 +10,17 @@ from pathlib import Path
 from agentguard.core.result import RunResult
 
 from agentguard.core.outcome import effective_pass
+from agentguard.reporting.models import RunReport
+from agentguard.regression.models import ComparisonResult
+
+
+def export_comparison_json(
+    comparison: ComparisonResult, destination: str | Path,
+) -> Path:
+    destination = Path(destination)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(comparison.model_dump_json(indent=2), encoding="utf-8")
+    return destination
 
 
 
@@ -21,12 +32,7 @@ def export_json(
     destination = Path(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
 
-    payload = {
-        "schema_version": 1,
-        "agent": agent_name,
-        "verdict": "PASS" if effective_pass(result) else "FAIL",
-        "result": result.model_dump(mode="json"),
-    }
+    payload = RunReport.from_result(result, agent_name).model_dump(mode="json")
 
     destination.write_text(
         json.dumps(
@@ -52,6 +58,7 @@ def export_html(
     def esc(value: object) -> str:
         return html.escape(str(value), quote=True)
 
+    result = RunReport.from_result(result, agent_name).result
     passed = effective_pass(result)
     verdict = "PASS" if passed else "FAIL"
     badge = "pass" if passed else "fail"
@@ -207,6 +214,14 @@ AI agent behavioral testing · Local execution report
         <small>Cleanup</small>
         <strong>{esc(result.cleanup_status)}</strong>
     </div>
+    <div class="stat">
+        <small>Evaluation status</small>
+        <strong>{esc(result.evaluation_status)}</strong>
+    </div>
+    <div class="stat">
+        <small>Execution assurance</small>
+        <strong>{esc(result.execution_context.execution_mode if result.execution_context else 'unknown')}</strong>
+    </div>
 </div>
 
 <div class="card">
@@ -254,10 +269,15 @@ AI agent behavioral testing · Local execution report
 </div>
 
 <div class="card">
-    <h2>Execution errors</h2>
+    <h2>Run errors ({esc(result.error_stage or 'none')})</h2>
     <p>
         {esc(result.error_type or 'None')}:
         {esc(result.error_message or '—')}
+    </p>
+    <h2>Evaluation errors</h2>
+    <p>
+        {esc(result.evaluation_error_type or 'None')}:
+        {esc(result.evaluation_error_message or '—')}
     </p>
 </div>
 

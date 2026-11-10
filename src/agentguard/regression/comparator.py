@@ -5,13 +5,8 @@ from agentguard.regression.models import (
     RegressionFinding,
     RegressionResult,
 )
-from agentguard.core.outcome import effective_pass
-
-BLOCKING_SEVERITIES = {
-    "error",
-    "critical",
-}
-
+from agentguard.core.paths import values_equal
+from agentguard.core.outcome import evidence_errors
 
 class RegressionComparator:
 
@@ -23,7 +18,35 @@ class RegressionComparator:
         candidate: RunResult,
     ) -> RegressionResult:
 
+        baseline = baseline.validated_copy()
+        candidate = candidate.validated_copy()
         findings: list[RegressionFinding] = []
+        integrity = self._validate_run(baseline, "baseline") + self._validate_run(candidate, "candidate")
+        findings.extend(integrity)
+        comparison_status = "verified"
+        if baseline.scenario_name != candidate.scenario_name:
+            comparison_status = "incompatible"
+        elif baseline.comparison_manifest is None or candidate.comparison_manifest is None:
+            comparison_status = "unverified"
+        elif baseline.comparison_manifest.fingerprint != candidate.comparison_manifest.fingerprint:
+            comparison_status = "incompatible"
+        elif (
+            baseline.execution_context.model_dump(exclude={"limitations"}) if baseline.execution_context else None
+        ) != (
+            candidate.execution_context.model_dump(exclude={"limitations"}) if candidate.execution_context else None
+        ):
+            comparison_status = "incompatible"
+        elif integrity or baseline.evaluation_status != "complete" or candidate.evaluation_status != "complete":
+            comparison_status = "unverified"
+        if comparison_status != "verified":
+            findings.append(RegressionFinding(
+                finding_type="incompatible_runs" if comparison_status == "incompatible" else "comparison_not_verified",
+                key="run:comparison", severity="critical",
+                message="Runs have incompatible scenario/environment/evaluator fingerprints."
+                if comparison_status == "incompatible" else "Comparison identity or evidence cannot be verified; rerun with a current manifest.",
+                baseline=baseline.comparison_manifest.fingerprint if baseline.comparison_manifest else None,
+                candidate=candidate.comparison_manifest.fingerprint if candidate.comparison_manifest else None,
+            ))
 
         if candidate.cleanup_status == "unverified":
             findings.append(
@@ -91,46 +114,21 @@ class RegressionComparator:
         )
 
 
-        blocking_regressions = sum(
-            1
-            for finding in findings
-            if (
-                finding.severity in BLOCKING_SEVERITIES
-                and finding.finding_type not in {
-                    "resolved_assertion_failure",
-                    "removed_tool_call",
-                    "removed_state_mutation",
-                }
-            )
-        )
-
-        candidate_accepted = effective_pass(candidate)
-
         return RegressionResult(
             baseline_name=baseline_name,
             candidate_name=candidate_name,
             baseline_run=baseline,
             candidate_run=candidate,
+            comparison_status=comparison_status,
             findings=findings,
-            blocking_regressions=blocking_regressions,
-            passed=(
-                blocking_regressions == 0
-                and candidate_accepted
-            ),
         )
 
-
-        return RegressionResult(
-            baseline_name=baseline_name,
-            candidate_name=candidate_name,
-            baseline_run=baseline,
-            candidate_run=candidate,
-            findings=findings,
-            blocking_regressions=blocking_regressions,
-            passed=blocking_regressions == 0,
-        )
-
-
+    def _validate_run(self, run: RunResult, label: str) -> list[RegressionFinding]:
+        problems = evidence_errors(run)
+        return [RegressionFinding(
+            finding_type="invalid_run_evidence", key=f"{label}:evidence", severity="critical",
+            message=f"{label}: {problem}",
+        ) for problem in problems]
 
     def _compare_assertions(
         self,
@@ -141,13 +139,15 @@ class RegressionComparator:
         findings = []
 
         baseline_assertions = {
-            assertion.name: assertion
+            assertion.assertion_id or assertion.name: assertion
             for assertion in baseline.assertions
+            if assertion.assertion_id is not None or assertion.name != "agent:execution"
         }
 
         candidate_assertions = {
-            assertion.name: assertion
+            assertion.assertion_id or assertion.name: assertion
             for assertion in candidate.assertions
+            if assertion.assertion_id is not None or assertion.name != "agent:execution"
         }
 
         common_names = (
@@ -155,10 +155,26 @@ class RegressionComparator:
             & candidate_assertions.keys()
         )
 
-        for name in sorted(common_names):
+        for identity in sorted(baseline_assertions.keys() - candidate_assertions.keys()):
+            check = baseline_assertions[identity]
+            findings.append(RegressionFinding(
+                finding_type="removed_assertion", key=check.name, severity="critical",
+                message=f"Candidate removed evaluation check: {check.name}",
+                baseline=identity, candidate=None,
+            ))
+        for identity in sorted(candidate_assertions.keys() - baseline_assertions.keys()):
+            check = candidate_assertions[identity]
+            findings.append(RegressionFinding(
+                finding_type="added_assertion", key=check.name, severity="info",
+                message=f"Candidate added evaluation check: {check.name}",
+                baseline=None, candidate=identity,
+            ))
 
-            before = baseline_assertions[name]
-            after = candidate_assertions[name]
+        for identity in sorted(common_names):
+
+            before = baseline_assertions[identity]
+            after = candidate_assertions[identity]
+            name = after.name
 
             if before.passed and not after.passed:
 
@@ -356,8 +372,8 @@ class RegressionComparator:
 
             if (
                 old.mutation_type != new.mutation_type
-                or old.before != new.before
-                or old.after != new.after
+                or not values_equal(old.before, new.before)
+                or not values_equal(old.after, new.after)
             ):
 
                 findings.append(

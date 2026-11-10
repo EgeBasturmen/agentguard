@@ -4,15 +4,17 @@
 from __future__ import annotations
 
 import html
-import json
+import re
 from pathlib import Path
-from typing import Any
+from agentguard.regression.models import ComparisonResult
+from agentguard.reporting.comparison import comparison_view
 
 
 def export_comparison_html(
-    comparison: dict[str, Any],
+    comparison: ComparisonResult,
     destination: str | Path,
 ) -> Path:
+    comparison = comparison_view(comparison)
     destination = Path(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
 
@@ -59,7 +61,9 @@ def export_comparison_html(
 
     detected = comparison.get("regression_detected", False)
     outcome = "REGRESSION DETECTED" if detected else "NO REGRESSION DETECTED"
-    outcome_class = "danger" if detected else "success"
+    if comparison["comparison_status"] != "verified":
+        outcome = "COMPARISON UNVERIFIED"
+    outcome_class = "success" if comparison["gate_decision"] == "ALLOW" else "danger"
 
     base_metrics = comparison.get("baseline_metrics", {})
     candidate_metrics = comparison.get("candidate_metrics", {})
@@ -140,7 +144,10 @@ li {
 <p class="muted">Scenario: __SCENARIO__</p>
 
 <div class="card">
+    <div class="verdict __OUTCOME_CLASS__">__GATE_DECISION__</div>
     <div class="verdict __OUTCOME_CLASS__">__OUTCOME__</div>
+    <p>Comparison: __COMPARISON_STATUS__</p>
+    __FAILURE_REASONS__
     <p class="muted">
         Comparison of recorded local agent test runs.
     </p>
@@ -167,6 +174,11 @@ li {
             __CANDIDATE_TRACES__ traces
         </p>
     </div>
+</div>
+
+<div class="card">
+    <h2>Removed Evaluation Checks</h2>
+    __REMOVED_CHECKS__
 </div>
 
 <div class="card">
@@ -201,6 +213,10 @@ It does not establish secure isolated execution.
         "__SCENARIO__": esc(comparison.get("scenario", "")),
         "__OUTCOME_CLASS__": outcome_class,
         "__OUTCOME__": outcome,
+        "__GATE_DECISION__": comparison["gate_decision"],
+        "__COMPARISON_STATUS__": esc(comparison["comparison_status"]),
+        "__FAILURE_REASONS__": render_list(comparison["failure_reasons"]),
+        "__REMOVED_CHECKS__": render_list(comparison["removed_assertions"]),
         "__BASE_VERDICT__": esc(comparison.get("baseline_verdict", "")),
         "__CANDIDATE_VERDICT__": esc(comparison.get("candidate_verdict", "")),
         "__BASE_AGENT__": esc(comparison.get("baseline_agent", "")),
@@ -221,8 +237,7 @@ It does not establish secure isolated execution.
         ),
     }
 
-    for key, value in replacements.items():
-        document = document.replace(key, value)
+    document = re.sub(r"__[A-Z_]+__", lambda match: replacements[match.group()], document)
 
     destination.write_text(document, encoding="utf-8")
     return destination

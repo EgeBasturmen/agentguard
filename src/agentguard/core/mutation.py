@@ -1,6 +1,6 @@
 from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 MutationType = Literal[
@@ -11,6 +11,7 @@ MutationType = Literal[
 
 
 class StateMutation(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
     path: str
     mutation_type: MutationType
 

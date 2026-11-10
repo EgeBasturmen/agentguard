@@ -7,18 +7,14 @@ from agentguard.core.mutation import StateMutation
 from agentguard.core.scenario import ForbiddenChange
 from agentguard.core.scenario import ToolExpectation
 from agentguard.core.trace import TraceEvent
+from agentguard.core.paths import PathResolutionError, parse_path, resolve_path, values_equal
 
 def get_path(
     state: dict[str, Any],
     path: str,
 ) -> Any:
 
-    value: Any = state
-
-    for part in path.split("."):
-        value = value[part]
-
-    return value
+    return resolve_path(state, parse_path(path))
 
 def evaluate_tool_expectation(
     traces: list[TraceEvent],
@@ -72,7 +68,8 @@ def evaluate_tool_expectation(
 
     return AssertionResult(
         name=f"tool:{expectation.tool_name}",
-        passed=True,
+        passed=False,
+        message="Tool expectation has no call limit.",
     )
 
 def evaluate_expected_state(
@@ -86,15 +83,15 @@ def evaluate_expected_state(
             expectation.path,
         )
 
-    except KeyError:
+    except PathResolutionError as exc:
 
         return AssertionResult(
             name=f"expected:{expectation.path}",
             passed=False,
-            message="Path does not exist.",
+            message=str(exc),
         )
 
-    passed = actual == expectation.value
+    passed = values_equal(actual, expectation.value)
 
     return AssertionResult(
         name=f"expected:{expectation.path}",
@@ -117,16 +114,30 @@ def evaluate_forbidden_change(
     forbidden: ForbiddenChange,
 ) -> AssertionResult:
 
-    matching = [
-        mutation
-        for mutation in mutations
-        if (
-            mutation.path == forbidden.path
-            or mutation.path.startswith(
-                forbidden.path + "."
-            )
-        )
-    ]
+    protected = parse_path(forbidden.path)
+    matching = []
+    for mutation in mutations:
+        changed = parse_path(mutation.path)
+        if changed[:len(protected)] == protected:
+            matching.append(mutation)
+        elif protected[:len(changed)] == changed:
+            # Lists and deleted/replaced parents are emitted as one mutation.
+            # Compare the protected descendant to avoid blocking sibling edits.
+            suffix = protected[len(changed):]
+            missing = object()
+
+            def descendant(value: Any, absent: bool) -> Any:
+                if absent:
+                    return missing
+                try:
+                    return resolve_path(value, suffix)
+                except PathResolutionError:
+                    return missing
+
+            before = descendant(mutation.before, mutation.mutation_type == "created")
+            after = descendant(mutation.after, mutation.mutation_type == "deleted")
+            if not values_equal(before, after):
+                matching.append(mutation)
 
     passed = len(matching) == 0
 

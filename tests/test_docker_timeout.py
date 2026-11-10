@@ -9,12 +9,15 @@ from agentguard.execution.docker_runtime import (
 from agentguard.security.policy import SecurityPolicy
 
 
+@pytest.mark.docker
 def test_timeout_removes_container():
     runtime = DockerRuntime()
 
     original_command = runtime._docker_create_command
+    created_names = []
 
     def slow_command(container_name, policy):
+        created_names.append(container_name)
         command = original_command(container_name, policy)
 
         # Container oluşturulurken normal worker yerine
@@ -47,3 +50,7 @@ def test_timeout_removes_container():
                     timeout_seconds=1,
                 ),
             )
+
+    assert created_names
+    # A timeout exception alone does not prove that execution stopped.
+    assert runtime._inspect_container_state(created_names[0]) is None

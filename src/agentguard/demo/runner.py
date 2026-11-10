@@ -134,7 +134,8 @@ def run_demo(output_dir: Path = Path("reports/demo")) -> dict:
         expected = (
             good_accepted
             and not bad_accepted
-            and comparison["regression_detected"]
+            and comparison.regression_detected
+            and not comparison.passed
         )
 
         if not expected:
@@ -146,9 +147,7 @@ def run_demo(output_dir: Path = Path("reports/demo")) -> dict:
                 "name": case.name,
                 "good_passed": good_accepted,
                 "bad_passed": bad_accepted,
-                "regression_detected": comparison[
-                    "regression_detected"
-                ],
+                "regression_detected": comparison.regression_detected,
                 "dashboard": str(dashboard),
             }
         )

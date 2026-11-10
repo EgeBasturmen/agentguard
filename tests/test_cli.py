@@ -233,7 +233,7 @@ def test_unverified_cleanup_cli_blocks(monkeypatch):
 
 
 def test_verified_cleanup_cli_allows(monkeypatch):
-    from agentguard.core.result import RunResult
+    from agentguard.core.result import AssertionResult, RunResult
     from agentguard.cli import main as cli_main
 
     def fake_run(self, scenario, agent):
@@ -242,6 +242,8 @@ def test_verified_cleanup_cli_allows(monkeypatch):
             passed=True,
             status="passed",
             cleanup_status="verified",
+            evaluation_status="complete",
+            assertions=[AssertionResult(name="checked", passed=True)],
         )
 
     monkeypatch.setattr(

@@ -62,6 +62,7 @@ def test_runtime_rejects_invalid_request_before_docker():
         )
 
 
+@pytest.mark.docker
 def test_docker_worker_protocol_roundtrip():
     runtime = DockerRuntime()
 

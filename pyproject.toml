@@ -2,19 +2,21 @@
 name = "agentguard"
 version = "0.1.0"
 description = "Regression and side-effect testing infrastructure for AI agents"
+readme = "README.md"
 requires-python = ">=3.10"
 
 dependencies = [
     "pydantic>=2.0",
     "typer>=0.12",
-    "rich>=13.0"
+    "rich>=13.0",
+    "pyyaml>=6.0"
 ]
 
 [project.optional-dependencies]
 dev = [
+    "build>=1.2",
     "pytest>=8.0",
-    "pytest-asyncio>=0.23",
-    "pyyaml>=6.0"
+    "pytest-asyncio>=0.23"
 ]
 
 [project.scripts]
@@ -28,8 +30,16 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "--strict-markers"
+filterwarnings = ["error::RuntimeWarning"]
 pythonpath = [".", "src"]
 testpaths = ["tests"]
+markers = [
+    "unit: isolated model, evaluator and component tests",
+    "integration: CLI, filesystem/report and subprocess integration tests",
+    "docker: requires a running Docker daemon and worker images",
+]
 
 [tool.setuptools.package-data]
 "agentguard.demo.fixtures" = ["*.yaml"]

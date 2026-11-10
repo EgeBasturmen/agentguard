@@ -19,6 +19,7 @@ from agentguard.execution.process_launcher import (
     launch_with_deadline,
 )
 
+@pytest.mark.docker
 def test_docker_worker_receives_request():
     runtime = DockerRuntime()
 

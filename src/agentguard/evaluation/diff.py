@@ -1,6 +1,7 @@
 from typing import Any
 
 from agentguard.core.mutation import StateMutation
+from agentguard.core.paths import join_path, values_equal
 
 
 def diff_states(
@@ -15,13 +16,11 @@ def diff_states(
 
         all_keys = set(before) | set(after)
 
-        for key in all_keys:
+        if any(not isinstance(key, str) or not key for key in all_keys):
+            raise ValueError("State diff requires non-empty string dictionary keys.")
+        for key in sorted(all_keys):
 
-            current_path = (
-                f"{path}.{key}"
-                if path
-                else str(key)
-            )
+            current_path = join_path(path, key)
 
             if key not in before:
 
@@ -61,7 +60,7 @@ def diff_states(
 
     if isinstance(before, list) and isinstance(after, list):
 
-        if before != after:
+        if not values_equal(before, after):
 
             mutations.append(
                 StateMutation(
@@ -74,7 +73,7 @@ def diff_states(
 
         return mutations
 
-    if before != after:
+    if not values_equal(before, after):
 
         mutations.append(
             StateMutation(

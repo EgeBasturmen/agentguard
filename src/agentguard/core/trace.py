@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 TraceEventType = Literal[
@@ -15,6 +15,7 @@ TraceEventType = Literal[
 
 
 class TraceEvent(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
     event_type: TraceEventType
 
     timestamp: datetime = Field(
