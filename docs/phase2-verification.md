@@ -109,12 +109,12 @@ sonra iptali doğrular; transactional tool testleri rollback ve geç mutation ol
 
 `artifacts/phase2-tests.xml`, `artifacts/phase2-wheel-check.json`,
 `artifacts/phase2-build.log`, `artifacts/phase2-preservation.json` yerel kanıtlardır;
-Git'e eklenmezler. Kaynak değişiklikleri ayrı clone/dalda review için bırakıldı; commit,
-push veya merge yapılmadı.
+Git'e eklenmezler. Kaynak mevcut `codex/phase2-execution` dalından GitHub’a commit/push edildi;
+main veya özgün çalışma ağacı/index üzerinde commit/push/merge yapılmadı.
 
 CI'ın ayrık unit/integration ve gerçek Docker job'ı yeni testleri de toplar.
-Daemon/image eksikliği skip değildir. Bu dal için uzak GitHub Actions çalıştırıldığı
-iddia edilmez; Phase 1'in uzak matrix kanıtı Phase 2'ye aktarılmaz.
+Daemon/image eksikliği skip değildir. Bu dalın kendi GitHub Actions ve artifact kanıtları aşağıdadır; Phase 1'in
+uzak matrix sonucu Phase 2 sonucu yerine kullanılmadı.
 
 ## Sınırlar ve kalan riskler
 
@@ -181,18 +181,46 @@ için authenticity garantisi verilmez. Faz 3 başlatılmadı.
 
 ## GitHub kapanış denetimi
 
-Kaynak bu mevcut checkout/daldan yayımlanacaktır; yeni bağımsız proje kopyası oluşturulmadı.
+Kaynak mevcut checkout/daldan yayımlandı; yeni bağımsız proje kopyası oluşturulmadı.
 Son denetimde sıfır exit sonrası tamamlanmamış stderr drain'inin başarı sayılabildiği
 gerçek subprocess regresyon testiyle gösterildi. IPC artık stderr tamamen okunmadan
 başarı vermez; drain deadline ve cancellation kapsamında kalır. İlgili 10 IPC testi geçti.
 Host import, broker bypass, izin/resource scope, state/trace forgery ve false-PASS
 kontrolleri mevcut gerçek Docker testleriyle yeniden çalıştırıldı.
 Son yerel koşu: 448 passed, failure/error/skip yok; temiz wheel + paketlenmiş async
-Docker agent ve JSON/HTML karşılaştırması başarılı. Uzak CI tamamlanmadan Phase 2'nin
-nihai kapanışı işlenmeyecektir.
+Docker agent ve JSON/HTML karşılaştırması başarılı. Nihai Phase 2 kapanışı yalnızca
+aşağıdaki uzak CI ve artifact doğrulaması başarıyla tamamlandıktan sonra işlendi.
 
 Geliştirme düzeni önerisi: Bu checkout tek aktif geliştirme alanı olarak kullanılmalı.
 Phase 2 sonrasında kullanıcı onayıyla aynı checkout'ta kalıcı `codex/development` dalı
 oluşturulabilir; sonraki aşamalar yeni proje kopyaları gerektirmez. Özgün çalışma ağacındaki
 kullanıcı değişiklikleri otomatik taşınmaz veya birleştirilmez. Şu anda dal oluşturma,
 taşıma, merge veya özgün main/index değişikliği yapılmadı.
+
+## Doğrulanmış GitHub CI kapanışı
+
+- Dal: `codex/phase2-execution`.
+- Doğrulanmış Phase 1 atası: `e5d5cae25587f71067974a4e37f4da1199d69e4e`;
+  GitHub Phase 1 referansı da aynı. Kaynak aktarımı/merge gerekmedi.
+- Phase 2 kaynak commit'i: `d55405d360bade0955c2f83fa798ae9f4a326088`.
+- [GitHub Actions koşusu 42834398786](https://github.com/EgeBasturmen/agentguard/actions/runs/42834398786):
+  **completed/success; 13/13 job başarılı**.
+- GitHub `main`: `d5673ea29aa4ec63938d33b16a46ef714191e23a`; değiştirilmedi.
+
+| Job grubu | Sonuç | Doğrulanan kanıt |
+| --- | --- | --- |
+| workflow-lint | Başarılı | actionlint |
+| Ubuntu 24.04 × Python 3.10, 3.11, 3.12, 3.13, 3.14 | 5/5 başarılı | Her hücrede 278 unit + 152 integration; isolated sdist→wheel; runtime-only temiz kurulum/CLI |
+| Windows 2022 × Python 3.10, 3.11, 3.12, 3.13, 3.14 | 5/5 başarılı | Her hücrede 278 unit + 152 integration; isolated sdist→wheel; runtime-only temiz kurulum/CLI |
+| docker | Başarılı | 18 gerçek Docker testi; temiz wheel içinden gerçek async agent, broker audit, verified cleanup ve rapor roundtrip |
+| Phase 1 gate (korunan mevcut CI job adı) | Başarılı | Tüm matrix, lint ve Docker işlerinin başarılı olması zorunlu |
+
+11 artifact indirildi. 21 JUnit XML kaydında failure/error/skip sıfır; 11 wheel-check
+kaydı runtime-only, checkout dışı CLI ve verdict parity başarısını doğruladı.
+Docker artifact'inin `controlled_docker=true` kaydı ayrıca kontrol edildi.
+İndirilen ZIP ve doğrulama JSON'ları yalnızca ignored yerel evidence dizinindedir;
+credential/token, image cache veya test artifact'i Git'e eklenmedi.
+
+Bu kapanış kaydı kaynak CI başarıyla tamamlandıktan sonra ayrı dokümantasyon commit'i
+olarak yayımlanır. Phase 3 kullanıcı onayını bekler. Bu doğrulama bir bağımsız pentest
+veya Docker kernel escape garantisi değildir; yukarıdaki destek sınırları geçerlidir.
