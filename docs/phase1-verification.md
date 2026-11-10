@@ -58,7 +58,7 @@ Dist dizinindeki birden fazla wheel sessizce seçilmez; dosya açıkça verilmel
 
 10 Kasım 2026 sonuçları aşağıdadır. Linux koşuları gerçek Python sürümlerinde
 Docker `python:*-slim` ortamlarında, Windows koşusu yerel Python 3.11.9 ile yapıldı.
-Bunlar GitHub-hosted ubuntu-24.04/windows-2022 job koşuları olarak sunulmaz.
+Yerel sonuçlar ile aşağıdaki GitHub-hosted ubuntu-24.04/windows-2022 kanıtı ayrıdır.
 
 | Kontrol | Durum |
 |---|---|
@@ -71,7 +71,7 @@ Bunlar GitHub-hosted ubuntu-24.04/windows-2022 job koşuları olarak sunulmaz.
 | Linux/Python 3.13.18 | 262 unit + 134 integration, 0 failed/error/skipped; isolated sdist→wheel ve temiz runtime kurulumu geçti |
 | Linux/Python 3.14.10 | 262 unit + 134 integration, 0 failed/error/skipped; isolated sdist→wheel ve temiz runtime kurulumu geçti |
 | Windows/Python 3.11 isolated build + temiz wheel | Doğrulandı: pytest/build/pytest-asyncio bulunmayan venv, checkout dışı console CLI, YAML/metadata ve verdict parity |
-| GitHub-hosted tam Linux/Windows matrix + Phase 1 gate | Bekliyor: kaydedilmemiş değişiklikler commit/push edilmedi |
+| GitHub-hosted tam Linux/Windows matrix + Phase 1 gate | Doğrulandı: [run 42732949709](https://github.com/EgeBasturmen/agentguard/actions/runs/42732949709), kaynak commit a622f73be13bbe532aba758165c31bf52dec17c6, 13/13 job başarılı |
 
 Yerel kanıt dizini `artifacts/phase1-local/`: summary.json, source-hashes.json,
 platform başına wheel-check.json/JUnit ve build/test logları içerir. Kaynak snapshot
@@ -79,17 +79,26 @@ SHA-256: `faf9e15cdc498b47b81b2d15355fe2ebaecc14b3bb7c9ce3111bdbad6d8641b9`.
 Kaynaklar geçici kopyada test edildi; mevcut build çıktıları, Git index'i ve demo
 raporları değiştirilmedi. Artefaktlar Git'e dahil edilmez.
 
-**Kapanış kararı:** AG-014 tamamlandı. AG-015'in kod, test ayrımı ve workflow
-implementasyonu tamam; GitHub-hosted CI doğrulaması **NEEDS_VERIFICATION**.
-Dolayısıyla Phase 1 bütünüyle kapandı denmez. Linux yerel matrix + Windows 3.11
-kanıtı, kalan Windows hosted hücrelerinin veya Actions cache/upload/gate
-entegrasyonunun başarılı çalıştığı iddiasına dönüştürülmez.
+**Kapanış kararı:** AG-014 ve AG-015 tamamlandı; Phase 1 kabul kapısı kapandı.
+Bu karar yalnızca yukarıdaki kaynak commit'inin gerçek GitHub Actions koşusu
+tamamen başarılı olduktan sonra kaydedildi. Python 3.10–3.14 × ubuntu-24.04 /
+windows-2022 matrisi 10/10 hücrede başarılıdır; her hücrede unit, integration,
+isolated sdist→wheel build ve temiz runtime/console CLI kontrolünün step sonucu
+ayrıca doğrulandı. Workflow lint, gerçek Docker ve Phase 1 gate de başarılıdır.
 
-Son GitHub satırı başarılı run URL'si ve aynı revision kanıtı olmadan kapatılmaz.
-Uzak CI'ı tetiklemek için incelenen değişikliklerin bir dala commit/push edilmesi
-gerekir. Kullanıcının kaydedilmemiş değişikliklerini korumak için bu yayın işlemi
-otomatik yapılmadı. Mevcut çalışma ağacı/index değişmeden ayrı bir dalda yayın
-onayından sonra CI kanıtı alınabilir; ardından AG-015 ve Phase 1 kapanışı güncellenir.
+CI'daki 11 artifact indirildi ve içerikleri doğrulandı: 10 matrix artifact'inin
+her birinde 262 unit + 134 integration, sıfır failure/error/skip ve başarılı
+runtime-only/outside-checkout/console-CLI/verdict-parity wheel kaydı; Docker
+artifact'inde 3 test, sıfır failure/error/skip vardır. Sadece workflow durumuna
+veya dosya varlığına dayanılarak kapanış yapılmadı.
+
+Kullanıcı onayıyla codex/phase1-ci dalı bağımsız Git kopyasından yayınlandı.
+main'e commit/push/merge yapılmadı. Özgün çalışma ağacının branch/HEAD, index
+hash'i ve mevcut değişmiş/izlenmeyen dosya hash'leri korundu. Kapanış belge
+güncellemeleri yalnızca bu ayrı dalda tutulur. İlgisiz raporlar, video,
+Microsoft/, venv/, yerel artefaktlar ve credential dosyaları yayına dahil edilmedi.
+Push öncesi allowlist/boyut/tür ve bilinen anahtar-token desen taraması yapıldı.
+
 Python >=3.10 metadata alt sınırıdır; gelecekteki bütün minor sürümlerin test
 edildiği iddiası değildir. Remote job'ın varlığı platform kanıtı yerine geçmez.
 
