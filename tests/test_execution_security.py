@@ -64,7 +64,7 @@ def test_isolated_backend_refuses_execution():
 
     with pytest.raises(
         IsolationNotImplementedError,
-        match="not implemented",
+        match="Live host agent objects are unsupported",
     ):
         backend.run(
             scenario=create_scenario(),

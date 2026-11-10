@@ -1,4 +1,5 @@
 
+import json
 import math
 import queue
 import subprocess
@@ -36,6 +37,7 @@ class ProcessIPC:
         timeout_seconds: float = 10.0,
         max_messages: int = 100,
         max_stderr_bytes: int = 64 * 1024,
+        run_manifest=None, cancel_event=None, max_stdout_bytes=1024 * 1024,
     ) -> None:
         if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be finite and positive.")
@@ -49,6 +51,11 @@ class ProcessIPC:
         if process.stdin is None or process.stdout is None:
             raise ValueError("Process must have stdin and stdout pipes.")
 
+        self._manifest = run_manifest
+        self._cancel = cancel_event
+        self._max_stdout_bytes = max_stdout_bytes
+        self.completion = None
+        self._stop = threading.Event()
         self._process = process
         self._dispatcher = dispatcher
         self._deadline = time.monotonic() + timeout_seconds
@@ -74,29 +81,45 @@ class ProcessIPC:
             )
             self._stderr_reader.start()
 
+    def close(self):
+        self._stop.set()
+        self._reader.join(timeout=1)
+        if self._stderr_reader is not None:
+            self._stderr_reader.join(timeout=1)
+
+    def _enqueue(self, item):
+        while not self._stop.is_set():
+            try:
+                self._messages.put(item, timeout=0.05)
+                return
+            except queue.Full:
+                pass
+
     def _read_worker_output(self) -> None:
         stream = self._process.stdout
+        total = 0
 
         try:
             while True:
                 line = stream.readline(MAX_IPC_MESSAGE_BYTES + 2)
 
                 if not line:
-                    self._messages.put(("eof", None))
+                    self._enqueue(("eof", None))
                     return
 
-                if len(line) > MAX_IPC_MESSAGE_BYTES + 1:
-                    self._messages.put(("error", "MESSAGE_TOO_LARGE"))
+                total += len(line)
+                if total > self._max_stdout_bytes or len(line) > MAX_IPC_MESSAGE_BYTES + 1:
+                    self._enqueue(("error", "MESSAGE_TOO_LARGE"))
                     return
 
                 if not line.endswith(b"\n"):
-                    self._messages.put(("error", "INVALID_FRAMING"))
+                    self._enqueue(("error", "INVALID_FRAMING"))
                     return
 
-                self._messages.put(("message", line))
+                self._enqueue(("message", line))
 
         except Exception:
-            self._messages.put(("error", "READ_ERROR"))
+            self._enqueue(("error", "READ_ERROR"))
 
     def _drain_stderr(self) -> None:
         stream = self._process.stderr
@@ -137,12 +160,12 @@ class ProcessIPC:
         )
         thread.start()
 
-        remaining = self._deadline - time.monotonic()
-
-        if remaining <= 0 or not finished.wait(timeout=remaining):
-            raise ProcessIPCTimeout(
-                "IPC response write exceeded its deadline."
-            )
+        while not finished.wait(timeout=0.05):
+            if self._cancel is not None and self._cancel.is_set():
+                from agentguard.execution.errors import ExecutionCancelled
+                raise ExecutionCancelled("IPC write cancelled.")
+            if time.monotonic() >= self._deadline:
+                raise ProcessIPCTimeout("IPC response write exceeded its deadline.")
 
         if errors:
             raise ProcessIPCError(
@@ -151,6 +174,9 @@ class ProcessIPC:
 
     def serve(self) -> None:
         while True:
+            if self._cancel is not None and self._cancel.is_set():
+                from agentguard.execution.errors import ExecutionCancelled
+                raise ExecutionCancelled("Execution cancelled.")
             if self._stderr_overflow.is_set():
                 raise ProcessIPCError(
                     "Worker stderr exceeded allowed limit."
@@ -164,11 +190,9 @@ class ProcessIPC:
                 )
 
             try:
-                kind, payload = self._messages.get(timeout=remaining)
-            except queue.Empty as exc:
-                raise ProcessIPCTimeout(
-                    "IPC session exceeded its deadline."
-                ) from exc
+                kind, payload = self._messages.get(timeout=min(remaining, 0.05))
+            except queue.Empty:
+                continue
 
             if self._stderr_overflow.is_set():
                 raise ProcessIPCError(
@@ -183,18 +207,32 @@ class ProcessIPC:
                         "Worker exit exceeded its deadline."
                     )
 
-                try:
-                    exit_code = self._process.wait(timeout=remaining)
-                except subprocess.TimeoutExpired as exc:
-                    raise ProcessIPCTimeout(
-                        "Worker did not exit after closing stdout."
-                    ) from exc
+                while self._process.poll() is None:
+                    if self._cancel is not None and self._cancel.is_set():
+                        from agentguard.execution.errors import ExecutionCancelled
+                        raise ExecutionCancelled("Worker exit cancelled.")
+                    if time.monotonic() >= self._deadline:
+                        raise ProcessIPCTimeout("Worker did not exit after closing stdout.")
+                    time.sleep(0.025)
+                exit_code = self._process.returncode
 
                 if exit_code != 0:
                     raise ProcessIPCError(
                         "Worker exited with a non-zero status."
                     )
 
+                if self._stderr_reader is not None:
+                    while self._stderr_reader.is_alive():
+                        if self._cancel is not None and self._cancel.is_set():
+                            from agentguard.execution.errors import ExecutionCancelled
+                            raise ExecutionCancelled("Worker stderr drain cancelled.")
+                        if time.monotonic() >= self._deadline:
+                            raise ProcessIPCTimeout("Worker stderr drain exceeded its deadline.")
+                        self._stderr_reader.join(timeout=0.025)
+                if self._stderr_overflow.is_set():
+                    raise ProcessIPCError("Worker stderr exceeded allowed limit.")
+                if self._manifest is not None and self.completion is None:
+                    raise ProcessIPCError("Worker exited without explicit completion.")
                 return
 
             if kind == "error":
@@ -209,6 +247,30 @@ class ProcessIPC:
                     "Worker exceeded IPC message limit."
                 )
 
+            if self._manifest is not None:
+                from agentguard.execution.lifecycle_protocol import Started, Completed
+                from agentguard.execution.ipc_protocol import decode_ipc_message
+                try:
+                    header = json.loads(payload)
+                    kind = header.get("type")
+                    if kind == "started":
+                        message = decode_ipc_message(payload, Started)
+                        if self._manifest.started or message.run_id != self._manifest.run_id:
+                            raise ValueError("Unexpected worker start")
+                        self._manifest.started = True
+                        continue
+                    if not self._manifest.started or self.completion is not None:
+                        raise ValueError("Invalid worker lifecycle order")
+                    if kind == "completed":
+                        message = decode_ipc_message(payload, Completed)
+                        if message.run_id != self._manifest.run_id:
+                            raise ValueError("Completion belongs to a different run")
+                        self.completion = message
+                        self._manifest.completed = True
+                        continue
+                    self._dispatcher._broker.remaining_seconds = max(0, self._deadline-time.monotonic())
+                except (ValueError, TypeError, IPCProtocolError) as exc:
+                    raise ProcessIPCError("Invalid worker lifecycle message") from exc
             try:
                 response = self._dispatcher.dispatch(payload)
             except IPCProtocolError as exc:
@@ -216,4 +278,6 @@ class ProcessIPC:
                     "Worker sent an invalid IPC request."
                 ) from exc
 
+            if self._manifest is not None and self._dispatcher._broker.runtime_error is not None:
+                raise self._dispatcher._broker.runtime_error
             self._write_with_deadline(response)

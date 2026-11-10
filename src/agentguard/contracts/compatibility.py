@@ -16,6 +16,23 @@ def local_capabilities() -> Capabilities:
     return Capabilities(supports_state_snapshot=True, supports_tool_observation=True)
 
 
+def controlled_capabilities() -> Capabilities:
+    return Capabilities(supports_state_snapshot=True, supports_tool_observation=True,
+        supports_tool_interception=True, supports_isolation=True,
+        supports_authoritative_evidence=True, supports_cancellation=True, supports_output=True)
+
+
+def controlled_context() -> ExecutionContext:
+    return ExecutionContext(execution_mode="controlled",
+        adapter=AdapterIdentity(id="python.container", version="1.0.0", protocol_version=2),
+        capabilities=controlled_capabilities(), limitations=[
+            "Authoritative evidence covers only trusted broker simulator state and instrumented tool calls.",
+            "Docker shares the host kernel; this is not a VM or a hostile multi-tenant boundary.",
+            "Only explicitly included Python source and standard-library dependencies are supported.",
+            "Worker completion/output are untrusted claims; verdicts are computed by the controller.",
+        ])
+
+
 def local_context() -> ExecutionContext:
     return ExecutionContext(
         execution_mode="observed", adapter=LOCAL_ADAPTER.model_copy(deep=True),
@@ -59,6 +76,11 @@ def supported_matrix() -> list[AdapterSupport]:
             adapter=AdapterIdentity(id=name, version="0.0.0"),
             component=component, implementation="contract_only",
         ))
+    result.append(AdapterSupport(
+        adapter=AdapterIdentity(id="python.container", version="1.0.0", protocol_version=2),
+        component="agent", implementation="implemented", execution_modes=["controlled"],
+        capabilities=controlled_capabilities(), environment_kinds=["custom"], tool_modes=["simulator"],
+    ))
     return result
 
 

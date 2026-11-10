@@ -62,7 +62,7 @@ def encode_ipc_message(
 ) -> bytes:
     data = message.model_dump_json().encode("utf-8")
 
-    if len(data) > MAX_IPC_MESSAGE_BYTES:
+    if len(data.removesuffix(b"\n")) > MAX_IPC_MESSAGE_BYTES:
         raise IPCProtocolError(
             "IPC message exceeds maximum allowed size."
         )
@@ -74,13 +74,22 @@ def decode_ipc_message(
     data: bytes,
     model_type: type[BaseModel],
 ) -> BaseModel:
-    if len(data) > MAX_IPC_MESSAGE_BYTES:
+    if len(data.removesuffix(b"\n")) > MAX_IPC_MESSAGE_BYTES:
         raise IPCProtocolError(
             "IPC message exceeds maximum allowed size."
         )
 
     try:
-        payload = json.loads(data)
+        def unique(pairs):
+            result = {}
+            for key, value in pairs:
+                if key in result: raise ValueError("Duplicate JSON key")
+                result[key] = value
+            return result
+        def reject(value): raise ValueError("Non-finite JSON number")
+        payload = json.loads(data, object_pairs_hook=unique, parse_constant=reject)
+        if type(payload.get("protocol_version")) is not int:
+            raise ValueError("Protocol version must be an integer")
         return model_type.model_validate(payload)
 
     except (ValueError, TypeError) as exc:

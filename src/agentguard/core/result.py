@@ -6,6 +6,7 @@ from agentguard.core.mutation import StateMutation
 from agentguard.core.trace import TraceEvent
 from agentguard.core.manifest import ComparisonManifest
 from agentguard.contracts.models import ExecutionContext
+from agentguard.execution.records import AuditEvent, RuntimeManifest
 
 
 
@@ -26,6 +27,10 @@ class AssertionResult(BaseModel):
 
 class RunResult(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
+    policy_status: Literal["unknown", "passed", "violation"] = "unknown"
+    worker_output: str | None = Field(default=None, max_length=8192)
+    run_manifest: RuntimeManifest | None = None
+    audit: list[AuditEvent] = Field(default_factory=list)
     execution_context: ExecutionContext | None = None
     comparison_manifest: ComparisonManifest | None = None
     scenario_name: str

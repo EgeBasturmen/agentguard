@@ -40,7 +40,10 @@ def summarize_result(result: RunResult) -> ResultSummary:
     context = result.execution_context
     return ResultSummary(
         execution_mode=context.execution_mode if context else "unknown",
-        execution_status="not_started" if result.error_stage == "validation"
+        policy_status=result.policy_status,
+        execution_status="cancelled" if result.error_type == "ExecutionCancelled"
+        else "timed_out" if result.error_type in {"ExecutionTimeout", "BuildTimeout", "ToolDeadlineError"}
+        else "not_started" if result.error_stage == "validation"
         else "error" if result.error_stage in {"provision", "snapshot", "execution", "diff"}
         else "unknown" if result.status == "error" and result.error_stage is None
         else "completed" if result.evaluation_status in {"complete", "error"} else "unknown",

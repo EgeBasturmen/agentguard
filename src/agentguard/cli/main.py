@@ -85,7 +85,7 @@ def render_report(
     console.print(f"[bold]Evaluation status:[/bold] {result.evaluation_status}")
     mode = result.execution_context.execution_mode if result.execution_context else "unknown"
     console.print(f"[bold]Execution assurance:[/bold] {mode}")
-    console.print("[bold]Policy enforcement:[/bold] unknown (no isolation guarantee)")
+    console.print(f"[bold]Policy enforcement:[/bold] {result.policy_status}")
     if result.evaluation_error_type is not None:
         console.print(
             f"Evaluation error: {result.evaluation_error_type}: "
@@ -311,6 +311,26 @@ def load_inputs(
     return scenario, agent, sandbox_factory
 
 
+def controlled_run(scenario_path, reference, sandbox, source_dir, include, policy_file):
+    from agentguard.execution.agent_spec import AgentLaunchSpec
+    from agentguard.orchestration.controller import RunController
+    from agentguard.security.policy import SecurityPolicy
+    environments = {
+        DEFAULT_SANDBOX: "commerce",
+        "agentguard.sandbox.files:FileSandbox": "files",
+    }
+    try:
+        if sandbox not in environments:
+            raise ValueError("Controlled mode requires a supported simulator; custom host sandbox imports require --trusted-local")
+        loaded = load_scenario(scenario_path)
+        policy = SecurityPolicy.model_validate_json(policy_file.read_bytes()) if policy_file else None
+        return RunController().run(loaded, AgentLaunchSpec(reference=reference, source_dir=source_dir, include_files=include),
+            environment=environments[sandbox], policy=policy)
+    except (OSError, ValueError, ScenarioLoadError) as exc:
+        console.print(f"Controlled execution error: {exc}")
+        raise typer.Exit(code=2) from exc
+
+
 @app.command("test")
 def test_command(
     agent: str = typer.Option(
@@ -346,30 +366,39 @@ def test_command(
         "--json-report",
         help="Save a machine-readable JSON report.",
     ),
+    trusted_local: bool = typer.Option(False, "--trusted-local", help="Explicitly trust agent and sandbox imports on the host."),
+    source_dir: Path = typer.Option(Path("."), "--source-dir", help="Controlled source root; only entrypoint and explicit includes are copied."),
+    include: list[str] = typer.Option([], "--include", help="Additional relative Python source file (repeatable)."),
+    policy_file: Path | None = typer.Option(None, "--policy", help="Controlled execution SecurityPolicy JSON."),
 ) -> None:
 
-    (
-        loaded_scenario,
-        loaded_agent,
-        sandbox_factory,
-    ) = load_inputs(
-        scenario_path=scenario,
-        agent_reference=agent,
-        sandbox_reference=sandbox,
-    )
+    if trusted_local:
+        (
+            loaded_scenario,
+            loaded_agent,
+            sandbox_factory,
+        ) = load_inputs(
+            scenario_path=scenario,
+            agent_reference=agent,
+            sandbox_reference=sandbox,
+        )
 
-    runner = ScenarioRunner(
-        sandbox_factory=sandbox_factory,
-    )
+        runner = ScenarioRunner(
+            sandbox_factory=sandbox_factory,
+        )
 
-    result = runner.run(
-        scenario=loaded_scenario,
-        agent=loaded_agent,
-    )
+        result = runner.run(
+            scenario=loaded_scenario,
+            agent=loaded_agent,
+        )
+        agent_name = loaded_agent.__class__.__name__
+    else:
+        result = controlled_run(scenario, agent, sandbox, source_dir, include, policy_file)
+        agent_name = agent
 
     render_report(
         result=result,
-        agent_name=loaded_agent.__class__.__name__,
+        agent_name=agent_name,
     )
     if html_report is not None:
         export_html(result, html_report, agent)
@@ -410,49 +439,57 @@ def regression_command(
     ),
     html_report: Path | None = typer.Option(None, "--html-report"),
     json_report: Path | None = typer.Option(None, "--json-report"),
+    trusted_local: bool = typer.Option(False, "--trusted-local", help="Explicitly trust agent and sandbox imports on the host."),
+    source_dir: Path = typer.Option(Path("."), "--source-dir", help="Controlled source root; only entrypoint and explicit includes are copied."),
+    include: list[str] = typer.Option([], "--include", help="Additional relative Python source file (repeatable)."),
+    policy_file: Path | None = typer.Option(None, "--policy", help="Controlled execution SecurityPolicy JSON."),
 ) -> None:
 
-    try:
-        loaded_scenario = load_scenario(scenario)
+    if trusted_local:
+        try:
+            loaded_scenario = load_scenario(scenario)
 
-    except ScenarioLoadError as exc:
-        console.print(
-            f"[bold red]Scenario error[/bold red]\n{exc}"
+        except ScenarioLoadError as exc:
+            console.print(
+                f"[bold red]Scenario error[/bold red]\n{exc}"
+            )
+            raise typer.Exit(code=2) from exc
+
+        try:
+            baseline_agent = load_python_agent(baseline)
+            candidate_agent = load_python_agent(candidate)
+
+        except AgentLoadError as exc:
+            console.print(
+                f"[bold red]Agent error[/bold red]\n{exc}"
+            )
+            raise typer.Exit(code=2) from exc
+
+        try:
+            sandbox_factory = load_python_sandbox(sandbox)
+
+        except SandboxLoadError as exc:
+            console.print(
+                f"[bold red]Sandbox error[/bold red]\n{exc}"
+            )
+            raise typer.Exit(code=2) from exc
+
+        runner = ScenarioRunner(
+            sandbox_factory=sandbox_factory,
         )
-        raise typer.Exit(code=2) from exc
 
-    try:
-        baseline_agent = load_python_agent(baseline)
-        candidate_agent = load_python_agent(candidate)
-
-    except AgentLoadError as exc:
-        console.print(
-            f"[bold red]Agent error[/bold red]\n{exc}"
+        baseline_result = runner.run(
+            scenario=loaded_scenario,
+            agent=baseline_agent,
         )
-        raise typer.Exit(code=2) from exc
 
-    try:
-        sandbox_factory = load_python_sandbox(sandbox)
-
-    except SandboxLoadError as exc:
-        console.print(
-            f"[bold red]Sandbox error[/bold red]\n{exc}"
+        candidate_result = runner.run(
+            scenario=loaded_scenario,
+            agent=candidate_agent,
         )
-        raise typer.Exit(code=2) from exc
-
-    runner = ScenarioRunner(
-        sandbox_factory=sandbox_factory,
-    )
-
-    baseline_result = runner.run(
-        scenario=loaded_scenario,
-        agent=baseline_agent,
-    )
-
-    candidate_result = runner.run(
-        scenario=loaded_scenario,
-        agent=candidate_agent,
-    )
+    else:
+        baseline_result = controlled_run(scenario, baseline, sandbox, source_dir, include, policy_file)
+        candidate_result = controlled_run(scenario, candidate, sandbox, source_dir, include, policy_file)
 
     comparator = RegressionComparator()
 

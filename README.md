@@ -17,6 +17,7 @@ Paketlenmiş demo checkout dışında da çalışır. `examples.*` modülleri ve
 `scenarios/` yalnızca kaynak checkout'unda bulunur; checkout içindeki ilk tek-test:
 
 ```console
+docker pull python:3.11-slim
 agentguard test --agent examples.refund_agent:GoodRefundAgent --scenario scenarios/refund_order.yaml
 ```
 
@@ -61,13 +62,36 @@ kurulum; ayrı işte gerçek Docker testleri çalışır. `Phase 1 gate` bütün
 başarısını gerektirir. [Phase 1 kabul ve doğrulama kaydı](docs/phase1-verification.md)
 uzak CI koşusu ile yerel eşdeğer kontrolleri birbirinden ayırır.
 
-## Mevcut yürütme sınırı
+## Yürütme ve güven sınırı
 
-`test` ve `regression` komutları agent ve özel sandbox modüllerini host'ta import
-eder ve aynı process içinde çalıştırır. Yalnızca güvendiğiniz yerel kodla kullanın.
-Docker worker şu anda yalnızca protokol smoke testini gerçekleştirir; CLI
-agent'larını izole çalıştırmaz. State/trace manipülasyonuna karşı izolasyon bu
-sürümde sağlanmaz. Async agent'lar açık hata ile reddedilir.
+`test` ve `regression` varsayılan olarak gerçek Docker container kullanır.
+Çalışan Linux Docker daemon ve önceden çekilmiş `python:3.11-slim` gerekir.
+Agent host'ta import edilmez; entrypoint `.py`, paket `__init__.py` ve açıkça
+`--include` ile seçilen Python dosyaları image'a kopyalanır. Kullanıcı Dockerfile'ı,
+setup hook'u veya dependency installer çalıştırılmaz.
+
+```console
+docker pull python:3.11-slim
+agentguard test --source-dir . --agent examples.refund_agent:GoodRefundAgent --scenario scenarios/refund_order.yaml
+agentguard regression --source-dir . --baseline examples.refund_agent:GoodRefundAgent --candidate examples.refund_agent:BadRefundAgent --scenario scenarios/refund_order.yaml
+```
+
+`--policy policy.json` tool izinlerini, tam değer eşleşmeli resource scope'larını,
+süreleri ve çıktı limitlerini belirler. Varsayılan politika seçilen simulator'ın
+kayıtlı tool'larına izin verir; açıkça verilen boş `allowed_tools` tümünü reddeder.
+Sync/async `run(task, sandbox)` desteklenir; tool çağrıları senkron IPC'dir.
+
+Eski yerel API `--trusted-local` ile korunur; yalnızca güvenilen kodla kullanılmalıdır.
+Özel host sandbox import'u bu seçeneği gerektirir. Paketlenmiş `demo` güvenilen
+örnekleri yerel çalıştırır; Docker güvenlik kanıtı sayılmaz.
+
+```console
+agentguard test --trusted-local --agent examples.refund_agent:GoodRefundAgent --scenario scenarios/refund_order.yaml
+```
+
+Docker bir VM değildir. Otoritatif evidence garantisi broker simulator state ve
+çağrılarıyla sınırlıdır; output doğruluk kanıtı sayılmaz. API, desteklenen
+garantiler, testler ve riskler: [Phase 2 doğrulama belgesi](docs/phase2-verification.md).
 
 ## Senaryo ve değerlendirme sözleşmesi
 

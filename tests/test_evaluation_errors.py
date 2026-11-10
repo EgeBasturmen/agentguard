@@ -171,7 +171,7 @@ def test_cli_json_and_html_share_outcome(tmp_path, monkeypatch, broken):
     json_path = tmp_path / "result.json"
     html_path = tmp_path / "result.html"
     invocation = CliRunner().invoke(app, [
-        "test", "--agent", "examples.refund_agent:GoodRefundAgent",
+        "test", "--trusted-local", "--agent", "examples.refund_agent:GoodRefundAgent",
         "--scenario", "scenarios/refund_order.yaml",
         "--json-report", str(json_path), "--html-report", str(html_path),
     ])
@@ -194,6 +194,6 @@ def test_cli_rejects_invalid_spec_before_import(tmp_path, monkeypatch):
     def forbidden(*args):
         pytest.fail("Invalid spec must be rejected before agent loading")
     monkeypatch.setattr(main, "load_python_agent", forbidden)
-    result = CliRunner().invoke(app, ["test", "--agent", "untrusted:Agent", "--scenario", str(path)])
+    result = CliRunner().invoke(app, ["test", "--trusted-local", "--agent", "untrusted:Agent", "--scenario", str(path)])
     assert result.exit_code == 2
     assert "Scenario error" in result.output

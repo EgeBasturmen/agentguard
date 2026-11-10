@@ -74,8 +74,8 @@ def test_matrix_is_version_pinned_and_returns_independent_objects():
     matrix = supported_matrix()
     identities = [(row.component, row.adapter.id, row.adapter.version, row.adapter.protocol_version) for row in matrix]
     assert len(identities) == len(set(identities))
-    assert all(row.adapter.protocol_version == 1 for row in matrix)
-    assert all(row.execution_modes == ["observed"] for row in matrix if row.implementation == "implemented")
+    assert all(row.adapter.protocol_version == (2 if row.adapter.id == "python.container" else 1) for row in matrix)
+    assert all(row.execution_modes == (["controlled"] if row.adapter.id == "python.container" else ["observed"]) for row in matrix if row.implementation == "implemented")
     matrix[0].capabilities.supports_isolation = True
     assert not supported_matrix()[0].capabilities.supports_isolation
     assert all(not row.execution_modes for row in matrix if row.implementation == "contract_only")

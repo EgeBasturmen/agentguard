@@ -30,7 +30,7 @@ def test_live_and_report_cli_have_identical_gate(tmp_path, baseline, candidate, 
         reports.append(path)
     live_json, stored_json = tmp_path / "live.json", tmp_path / "stored.json"
     live = runner.invoke(app, [
-        "regression", "--baseline", refs[0], "--candidate", refs[1],
+        "regression", "--trusted-local", "--baseline", refs[0], "--candidate", refs[1],
         "--scenario", scenario_path, "--json-report", str(live_json),
         "--html-report", str(tmp_path / "live.html"),
     ])

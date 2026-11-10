@@ -13,7 +13,7 @@ def test_good_agent_cli_allows():
     result = runner.invoke(
         app,
         [
-            "test",
+            "test", "--trusted-local",
             "--scenario",
             SCENARIO,
             "--agent",
@@ -29,7 +29,7 @@ def test_bad_agent_cli_blocks():
     result = runner.invoke(
         app,
         [
-            "test",
+            "test", "--trusted-local",
             "--scenario",
             SCENARIO,
             "--agent",
@@ -45,7 +45,7 @@ def test_duplicate_agent_cli_blocks():
     result = runner.invoke(
         app,
         [
-            "test",
+            "test", "--trusted-local",
             "--scenario",
             SCENARIO,
             "--agent",
@@ -61,7 +61,7 @@ def test_unknown_agent():
     result = runner.invoke(
         app,
         [
-            "test",
+            "test", "--trusted-local",
             "--scenario",
             SCENARIO,
             "--agent",
@@ -77,7 +77,7 @@ def test_missing_scenario():
     result = runner.invoke(
         app,
         [
-            "test",
+            "test", "--trusted-local",
             "--scenario",
             "scenarios/does_not_exist.yaml",
             "--agent",
@@ -93,7 +93,7 @@ def test_regression_duplicate_refund_blocks():
     result = runner.invoke(
         app,
         [
-            "regression",
+            "regression", "--trusted-local",
             "--scenario",
             SCENARIO,
             "--baseline",
@@ -112,7 +112,7 @@ def test_regression_same_agent_allows():
     result = runner.invoke(
         app,
         [
-            "regression",
+            "regression", "--trusted-local",
             "--scenario",
             SCENARIO,
             "--baseline",
@@ -129,7 +129,7 @@ def test_crashing_agent_cli_blocks():
     result = runner.invoke(
         app,
         [
-            "test",
+            "test", "--trusted-local",
             "--scenario",
             SCENARIO,
             "--agent",
@@ -147,7 +147,7 @@ def test_file_sandbox_cli_allows():
     result = runner.invoke(
         app,
         [
-            "test",
+            "test", "--trusted-local",
             "--scenario",
             "scenarios/read_file.yaml",
             "--agent",
@@ -165,7 +165,7 @@ def test_file_sandbox_cli_blocks():
     result = runner.invoke(
         app,
         [
-            "test",
+            "test", "--trusted-local",
             "--scenario",
             "scenarios/read_file.yaml",
             "--agent",
@@ -183,7 +183,7 @@ def test_unknown_sandbox_cli():
     result = runner.invoke(
         app,
         [
-            "test",
+            "test", "--trusted-local",
             "--scenario",
             "scenarios/read_file.yaml",
             "--agent",
@@ -219,7 +219,7 @@ def test_unverified_cleanup_cli_blocks(monkeypatch):
     result = runner.invoke(
         app,
         [
-            "test",
+            "test", "--trusted-local",
             "--scenario",
             SCENARIO,
             "--agent",
@@ -255,7 +255,7 @@ def test_verified_cleanup_cli_allows(monkeypatch):
     result = runner.invoke(
         app,
         [
-            "test",
+            "test", "--trusted-local",
             "--scenario",
             SCENARIO,
             "--agent",

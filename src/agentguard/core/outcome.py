@@ -18,6 +18,14 @@ def evidence_errors(result: RunResult) -> list[str]:
             problems.append("Execution context claims an unsupported adapter or assurance mode.")
         elif any(not getattr(profile.capabilities, name) for name in context.capabilities.supported()):
             problems.append("Execution context claims unsupported capabilities.")
+    if result.execution_context is not None and result.execution_context.execution_mode == "controlled":
+        manifest = result.run_manifest
+        if result.cleanup_status != "verified": problems.append("Controlled cleanup is not verified.")
+        if result.policy_status != "passed": problems.append("Controlled tool policy did not pass.")
+        if manifest is None or not manifest.started or not manifest.completed or not all((manifest.image_id, manifest.source_digest, manifest.base_digest, manifest.worker_digest, manifest.container_id)):
+            problems.append("Controlled runtime evidence is incomplete.")
+        if any(event.status != "completed" for event in result.audit):
+            problems.append("Controlled audit contains denied or failed calls.")
     names = [item.name for item in result.assertions]
     ids = [item.assertion_id for item in result.assertions if item.assertion_id is not None]
     if len(names) != len(set(names)) or len(ids) != len(set(ids)):

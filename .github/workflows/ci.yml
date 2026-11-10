@@ -98,8 +98,12 @@ jobs:
         run: |
           docker build -f docker/Dockerfile.worker -t agentguard-worker:dev .
           docker pull python:3.11-slim
-      - name: Real Docker tests (missing daemon or image is a failure)
+      - name: Real Docker handshake, controlled agents, policy, lifecycle and isolation tests (no skips)
         run: python -m pytest -q -m docker --junitxml=artifacts/docker.xml
+      - name: Build distribution and verify controlled execution from a clean installed wheel
+        run: |
+          python -m build --outdir artifacts/dist
+          python scripts/check_wheel.py artifacts/dist --docker --result artifacts/docker-wheel-check.json
       - name: Retain Docker test evidence
         if: always()
         uses: actions/upload-artifact@v7

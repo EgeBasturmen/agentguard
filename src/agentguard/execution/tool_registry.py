@@ -10,6 +10,7 @@ class RegisteredTool:
     name: str
     schema: type[BaseModel]
     handler: Callable[..., Any]
+    stateful: bool = False
 
 
 class ToolRegistry:
@@ -28,6 +29,7 @@ class ToolRegistry:
         name: str,
         schema: type[BaseModel],
         handler: Callable[..., Any],
+        *, stateful: bool = False,
     ) -> None:
         if not isinstance(name, str) or not name.strip():
             raise ValueError("Tool name must be non-empty.")
@@ -49,6 +51,7 @@ class ToolRegistry:
             name=name,
             schema=schema,
             handler=handler,
+            stateful=stateful,
         )
 
     def get(self, name: str) -> RegisteredTool | None:

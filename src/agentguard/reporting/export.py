@@ -219,7 +219,7 @@ AI agent behavioral testing · Local execution report
         <strong>{esc(result.evaluation_status)}</strong>
     </div>
     <div class="stat">
-        <small>Execution assurance</small>
+        <small>Policy: {esc(result.policy_status)} / Execution assurance</small>
         <strong>{esc(result.execution_context.execution_mode if result.execution_context else 'unknown')}</strong>
     </div>
 </div>
