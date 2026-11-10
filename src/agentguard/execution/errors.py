@@ -12,3 +12,6 @@ class ExecutionCancelled(RuntimeError):
 
 class ToolDeadlineError(ExecutionTimeout):
     pass
+
+class ExecutionCleanupError(RuntimeError):
+    """An external connector cannot verify its resource/session cleanup."""

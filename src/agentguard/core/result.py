@@ -27,6 +27,9 @@ class AssertionResult(BaseModel):
 
 class RunResult(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
+    integration_status: Literal["not_applicable", "verified", "unverified", "unsupported"] = "not_applicable"
+    coverage_gaps: list[str] = Field(default_factory=list)
+    integration_manifest: dict = Field(default_factory=dict)
     policy_status: Literal["unknown", "passed", "violation"] = "unknown"
     worker_output: str | None = Field(default=None, max_length=8192)
     run_manifest: RuntimeManifest | None = None

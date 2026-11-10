@@ -1,0 +1,2 @@
+include tests/conftest.py
+include tests/phase3_service.py

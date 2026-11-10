@@ -9,6 +9,27 @@ from agentguard.contracts.compatibility import supported_matrix
 def evidence_errors(result: RunResult) -> list[str]:
     """Shared evidence integrity checks for run and comparison decisions."""
     problems = []
+    if result.integration_status in {"unverified", "unsupported"}:
+        problems.append("Integration evidence is not verified.")
+    if result.integration_status == "verified":
+        try:
+            from agentguard.integrations.evidence import IntegrationEvidence
+            evidence = IntegrationEvidence.model_validate(result.integration_manifest)
+            context = result.execution_context
+            expected_adapter = {'http':'http.endpoint','python':'python.container','container':'container.ipc'}[evidence.agent_transport]
+            if context is None or context.adapter.id != expected_adapter:
+                problems.append("Integration agent/assurance identity is inconsistent.")
+            comparison = result.comparison_manifest
+            environment = comparison.environment if comparison is not None else ''
+            expected = 'integration:' + evidence.fingerprint if evidence.agent_transport == 'http' else 'controlled.simulator.v1:' + evidence.fingerprint + ':'
+            if (environment != expected if evidence.agent_transport == 'http' else not environment.startswith(expected)):
+                problems.append("Integration and comparison manifests are not bound.")
+            if 'mock' in evidence.modes and comparison is not None:
+                scenario = comparison.scenario
+                if scenario.expected_state or scenario.forbidden_changes or scenario.invariants:
+                    problems.append("Schema mock cannot establish business state/effect evidence.")
+        except (ValueError, TypeError, KeyError):
+            problems.append("Integration manifest is invalid or was modified.")
     context = result.execution_context
     if context is not None:
         profile = next((row for row in supported_matrix()

@@ -22,9 +22,9 @@ def controlled_capabilities() -> Capabilities:
         supports_authoritative_evidence=True, supports_cancellation=True, supports_output=True)
 
 
-def controlled_context() -> ExecutionContext:
+def controlled_context(adapter_id="python.container") -> ExecutionContext:
     return ExecutionContext(execution_mode="controlled",
-        adapter=AdapterIdentity(id="python.container", version="1.0.0", protocol_version=2),
+        adapter=AdapterIdentity(id=adapter_id, version="1.0.0", protocol_version=2),
         capabilities=controlled_capabilities(), limitations=[
             "Authoritative evidence covers only trusted broker simulator state and instrumented tool calls.",
             "Docker shares the host kernel; this is not a VM or a hostile multi-tenant boundary.",
@@ -53,6 +53,7 @@ class AdapterSupport(ContractModel):
     capabilities: Capabilities = Field(default_factory=Capabilities)
     environment_kinds: list[EnvironmentKind] = Field(default_factory=list)
     tool_modes: list[ToolMode] = Field(default_factory=list)
+    supported_protocols: list[str] = Field(default_factory=list)
 
 
 def supported_matrix() -> list[AdapterSupport]:
@@ -81,6 +82,25 @@ def supported_matrix() -> list[AdapterSupport]:
         component="agent", implementation="implemented", execution_modes=["controlled"],
         capabilities=controlled_capabilities(), environment_kinds=["custom"], tool_modes=["simulator"],
     ))
+    result.append(AdapterSupport(
+        adapter=AdapterIdentity(id="container.ipc",version="1.0.0",protocol_version=2),component="agent",
+        implementation="implemented",execution_modes=["controlled"],capabilities=controlled_capabilities(),
+        environment_kinds=["custom"],tool_modes=["simulator","staging","replay","mock"],
+    ))
+    result.append(AdapterSupport(
+        adapter=AdapterIdentity(id="http.endpoint",version="1.0.0"),component="agent",
+        implementation="implemented",execution_modes=["observed"],
+        capabilities=Capabilities(supports_output=True,supports_state_snapshot=True),
+        environment_kinds=["http"],tool_modes=["staging"],
+    ))
+    for name,version,protocol in (("openapi.tool","3.1.1","3.1.1"),("mcp.tool","1.0.0","2025-11-25")):
+        result.append(AdapterSupport(adapter=AdapterIdentity(id=name,version=version),component="tool",implementation="implemented",
+            execution_modes=["controlled"],capabilities=Capabilities(supports_tool_observation=True,supports_tool_interception=True),
+            tool_modes=["staging","replay","mock"],supported_protocols=[protocol]))
+    for name,kind in (("filesystem.namespace","filesystem"),("document.dataset","dataset"),("http.namespace","http")):
+        result.append(AdapterSupport(adapter=AdapterIdentity(id=name,version="1.0.0"),component="environment",implementation="implemented",
+            execution_modes=["observed","controlled"],capabilities=Capabilities(supports_state_snapshot=True,supports_reset=True),
+            environment_kinds=[kind],tool_modes=["staging"] if kind=="http" else ["simulator"],supported_protocols=["1"]))
     return result
 
 

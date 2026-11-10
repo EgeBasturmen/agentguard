@@ -11,6 +11,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import tarfile
 import venv
 
 
@@ -23,6 +24,12 @@ def select_wheel(path: Path) -> Path:
 
 def check_wheel(wheel: Path, wheelhouse: Path | None = None, *, docker: bool = False) -> dict:
     wheel = select_wheel(wheel)
+    # Source distributions ship runnable test support rather than dangling test imports.
+    for source_archive in wheel.parent.glob("agentguard-*.tar.gz"):
+        with tarfile.open(source_archive) as archive:
+            names=archive.getnames()
+            for support in ("tests/conftest.py","tests/phase3_service.py"):
+                assert any(name.endswith('/'+support) for name in names), f"sdist misses {support}"
     with tempfile.TemporaryDirectory(prefix="agentguard-wheel-") as directory:
         work = Path(directory).resolve()
         environment = work / "runtime"
@@ -67,7 +74,8 @@ modules = ["agentguard", "agentguard.cli.main", "agentguard.runner.runner",
            "agentguard.contracts.models", "agentguard.core.manifest",
            "agentguard.reporting.models", "agentguard.reporting.comparison",
            "agentguard.orchestration.controller", "agentguard.execution.controlled_runtime",
-           "agentguard.execution.agent_spec"]
+           "agentguard.execution.agent_spec", "agentguard.sdk", "agentguard.integrations.plan",
+           "agentguard.environments.adapters"]
 for name in modules:
     location = Path(importlib.import_module(name).__file__).resolve()
     assert location.is_relative_to(root), (name, location, root)
@@ -142,6 +150,25 @@ print(json.dumps({"version": distribution.version, "python": sys.version.split()
             assert evidence["audit"] and evidence["run_manifest"]["completed"]
             run([cli, "compare", controlled_path, controlled_path, "--html-report", work / "controlled.html"])
             details["controlled_docker"] = True
+            source.write_text(source.read_text(encoding="utf-8") +
+                "\nclass WorkspaceAgent:\n"
+                "    async def run(self, task, sandbox):\n"
+                "        sandbox.call('file.write', {'filename':'note.txt','content':'done'})\n"
+                "        return 'phase3 integration'\n", encoding="utf-8")
+            plan = dict(schema_version=1, scenario=dict(name="workspace",task="edit note",initial_state={"files":{"note.txt":"draft"}},
+                expected_state=[{"path":r"files.note\.txt","value":"done"}]),
+                agent=dict(transport="python",reference="runtime_agent:WorkspaceAgent",source_dir="."),
+                environment=dict(kind="filesystem"),tools=[dict(connector="environment")],policy=dict(allowed_tools=["file.write"]))
+            plan_path=work/"integration-plan.json"
+            plan_path.write_text(json.dumps(plan),encoding="utf-8")
+            integration_path=work/"integration.json"
+            run([cli,"integration",plan_path,"--json-report",integration_path])
+            integration=json.loads(integration_path.read_text(encoding="utf-8"))
+            assert integration["verdict"]=="PASS" and integration["result"]["integration_status"]=="verified"
+            assert integration["result"]["worker_output"]=="phase3 integration"
+            assert integration["result"]["cleanup_status"]=="verified"
+            run([cli,"compare",integration_path,integration_path,"--html-report",work/"integration.html"])
+            details["phase3_integration"] = True
         details.update({"wheel": wheel.name, "runtime_only": True, "outside_checkout": True,
                         "console_cli": True, "verdict_parity": True, "status": "passed"})
         return details

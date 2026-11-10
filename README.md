@@ -196,3 +196,20 @@ izole yürütme ayrı roadmap görevleridir.
 ## Demo video
 
 [▶ Watch AgentGuard Demo](https://www.youtube.com/watch?v=HI7czD8PkOg)
+
+## Phase 3 entegrasyonları
+
+Kalıcı geliştirme checkout'u ve dalı: `artifacts/phase2/repo`, `codex/development`.
+Yeni kopya açmadan bu checkout üzerinden devam edilir.
+
+`agentguard.sdk`; Python/HTTP/container agent, OpenAPI 3.1.1 ve MCP 2025-11-25 tool,
+filesystem/document/HTTP staging environment, explicit simulator/staging/replay/mock
+routing ve capability-aware preflight sağlar. HTTP agent observed-only'dir; eksik
+tool interception/observation gereksinimi preflight'ta BLOCK olur.
+
+```console
+agentguard integration examples/phase3_plan.json --preflight-only
+agentguard integration examples/phase3_plan.json --json-report reports/run.json --html-report reports/run.html
+```
+
+[Phase 3 API, destek profilleri ve doğrulama kaydı](docs/phase3-verification.md).

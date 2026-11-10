@@ -50,5 +50,5 @@ def summarize_result(result: RunResult) -> ResultSummary:
         behavior_status=behavior, cleanup_status=result.cleanup_status,
         evaluation_completeness=result.evaluation_status, label=label,
         gate_decision="ALLOW" if accepted else "BLOCK", failure_reasons=reasons,
-        coverage_gaps=list(context.limitations) if context else ["Execution assurance and capabilities were not recorded."],
+        coverage_gaps=(list(context.limitations) if context else ["Execution assurance and capabilities were not recorded."]) + result.coverage_gaps,
     )

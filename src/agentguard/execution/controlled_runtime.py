@@ -1,6 +1,7 @@
 """Controlled Docker session. Builds copy source data; never execute agent build scripts."""
 import hashlib
 import json
+import math
 from pathlib import Path
 import re
 import tempfile
@@ -60,6 +61,18 @@ class ControlledDockerRuntime(DockerRuntime):
         self.output = None
 
     def build(self, spec, manifest, deadline, cancel):
+        from agentguard.integrations.agents import ContainerLaunchSpec
+        if isinstance(spec, ContainerLaunchSpec):
+            info=json.loads(command(["docker","image","inspect",spec.image],deadline,cancel))[0]
+            image=info['Id']
+            if not re.fullmatch(r"sha256:[0-9a-f]{64}",image): raise ValueError("Invalid pinned container image")
+            self.IMAGE=image
+            manifest.image_id=image
+            manifest.base_digest=image
+            manifest.source_digest=image.split(':')[1]
+            manifest.worker_digest=image.split(':')[1]
+            manifest.artifact_kind='container_image'
+            return
         sources, manifest.source_digest = spec.sources()
         directory = Path(__file__).parent
         worker = (directory/"controlled_worker.py").read_bytes()
@@ -102,8 +115,13 @@ class ControlledDockerRuntime(DockerRuntime):
             self.cleanup_status = "unverified"
             raise
 
-    def execute(self, spec, task, broker, policy, manifest, cancel=None):
-        deadline = time.monotonic() + policy.timeout_seconds
+    def execute(self, spec, task, broker, policy, manifest, cancel=None, *, execution_deadline=None):
+        now=time.monotonic()
+        deadline=now+policy.timeout_seconds
+        if execution_deadline is not None:
+            if type(execution_deadline) not in {int,float} or not math.isfinite(execution_deadline) or execution_deadline<=now:
+                raise ExecutionTimeout('No execution time budget remains')
+            deadline=min(deadline,execution_deadline)
         name = "agentguard-run-" + manifest.run_id
         process = None
         ipc = None

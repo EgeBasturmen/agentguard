@@ -14,9 +14,11 @@ from agentguard.contracts.compatibility import controlled_context
 
 class RunController:
     def run(self, scenario: Scenario, agent: AgentLaunchSpec, *, environment="commerce", registry=None,
-            policy: SecurityPolicy | None = None, cancel_event=None):
+            policy: SecurityPolicy | None = None, cancel_event=None, state_observer=None, environment_identity=None, execution_deadline=None):
         scenario = Scenario.model_validate(scenario.model_dump())
-        agent = AgentLaunchSpec.model_validate(agent.model_dump())
+        from agentguard.integrations.agents import ContainerLaunchSpec
+        agent_type=ContainerLaunchSpec if isinstance(agent,ContainerLaunchSpec) else AgentLaunchSpec
+        agent = agent_type.model_validate(agent.model_dump())
         if registry is None:
             registry, names = registry_for(environment)
         else:
@@ -36,18 +38,18 @@ class RunController:
                 self.broker = ToolBroker(registry=registry, state=initial_state, policy=policy,
                     forbidden_changes=scenario.forbidden_changes, tracer=tracer, cancel_event=cancel_event)
                 holders["broker"] = self.broker
-            def get_state(self): return self.broker.state
+            def get_state(self): return state_observer() if state_observer is not None else self.broker.state
         class Relay:
             def run(self, task, sandbox):
-                runtime.execute(agent, task, sandbox.broker, policy, manifest, cancel_event)
+                runtime.execute(agent, task, sandbox.broker, policy, manifest, cancel_event, execution_deadline=execution_deadline)
         policy_data = policy.model_dump(mode="json")
         policy_data["allowed_tools"] = sorted(policy_data["allowed_tools"])
         for scopes in policy_data["resource_scopes"].values():
             for key in scopes: scopes[key] = sorted(scopes[key])
         digest = hashlib.sha256(json.dumps(policy_data, sort_keys=True).encode()).hexdigest()
-        result = ScenarioRunner(StateView, environment_id=f"controlled.simulator.v1:{environment}:{digest}").run(scenario, Relay())
+        result = ScenarioRunner(StateView, environment_id=f"controlled.simulator.v1:{environment_identity or environment}:{digest}").run(scenario, Relay())
         broker = holders.get("broker")
-        result.execution_context = controlled_context()
+        result.execution_context = controlled_context("container.ipc" if isinstance(agent,ContainerLaunchSpec) else "python.container")
         result.cleanup_status = runtime.cleanup_status
         result.run_manifest = manifest
         result.worker_output = runtime.output

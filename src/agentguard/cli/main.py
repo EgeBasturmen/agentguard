@@ -511,6 +511,32 @@ def regression_command(
         raise typer.Exit(code=1)
 
 
+@app.command("integration")
+def integration_command(
+    plan: Path = typer.Argument(..., help="Versioned integration plan JSON; no host agent imports."),
+    preflight_only: bool = typer.Option(False, "--preflight-only", help="Discover and check compatibility; do not provision or invoke an agent."),
+    json_report: Path | None = typer.Option(None, "--json-report"),
+    html_report: Path | None = typer.Option(None, "--html-report"),
+) -> None:
+    from agentguard.integrations.plan import run_plan
+    try:
+        result = run_plan(plan, preflight_only=preflight_only)
+    except Exception as exc:
+        console.print(f"Integration preflight error: {type(exc).__name__}: {exc}")
+        raise typer.Exit(code=2) from exc
+    if preflight_only:
+        import json
+        typer.echo(json.dumps(dict(supported=result.supported,issues=result.issues,coverage_gaps=result.coverage_gaps)))
+        if not result.supported: raise typer.Exit(code=1)
+        return
+    render_report(result, "integration-plan")
+    for gap in result.coverage_gaps:
+        console.print(f"Coverage gap: {gap}")
+    if json_report is not None: export_json(result, json_report, "integration-plan")
+    if html_report is not None: export_html(result, html_report, "integration-plan")
+    if not effective_pass(result): raise typer.Exit(code=1)
+
+
 @app.command("compare")
 def compare_command(
     baseline: Path = typer.Argument(

@@ -17,6 +17,7 @@ class RuntimeManifest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     run_id: str = Field(pattern=r"^[0-9a-f]{32}$")
     protocol_version: Literal[2] = 2
+    artifact_kind: Literal["python_source", "container_image"] = "python_source"
     image_id: str = ""
     base_digest: str = ""
     source_digest: str = ""

@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "scenario": {
+    "name": "edit-note",
+    "task": "Set note.txt to done",
+    "initial_state": {
+      "files": {
+        "note.txt": "draft"
+      }
+    },
+    "expected_state": [
+      {
+        "path": "files.note\\.txt",
+        "value": "done"
+      }
+    ],
+    "tool_expectations": [
+      {
+        "tool_name": "file.write",
+        "times": 1
+      }
+    ]
+  },
+  "agent": {
+    "transport": "python",
+    "reference": "phase3_agent:FileAgent",
+    "source_dir": "."
+  },
+  "environment": {
+    "kind": "filesystem"
+  },
+  "tools": [
+    {
+      "connector": "environment"
+    }
+  ],
+  "policy": {
+    "allowed_tools": [
+      "file.write"
+    ],
+    "resource_scopes": {
+      "file.write": {
+        "filename": [
+          "note.txt"
+        ]
+      }
+    }
+  },
+  "required_capabilities": [
+    "supports_tool_interception",
+    "supports_state_snapshot"
+  ]
+}

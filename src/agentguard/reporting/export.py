@@ -225,6 +225,8 @@ AI agent behavioral testing · Local execution report
 </div>
 
 <div class="card">
+    <h2>Integration evidence: {esc(result.integration_status)}</h2>
+    <ul>{''.join('<li>'+esc(gap)+'</li>' for gap in result.coverage_gaps)}</ul>
     <h2>Assertions ({len(result.assertions)})</h2>
     <table>
         <thead>

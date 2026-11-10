@@ -2,7 +2,7 @@
 import json
 import multiprocessing
 import time
-from agentguard.execution.errors import ExecutionCancelled, ToolDeadlineError
+from agentguard.execution.errors import ExecutionCancelled, ToolDeadlineError, ExecutionCleanupError
 
 MAX_TOOL_RESULT_BYTES = 1024 * 1024
 
@@ -14,7 +14,7 @@ def _invoke(connection, handler, state, arguments):
         if len(payload) > MAX_TOOL_RESULT_BYTES:
             raise ValueError("Tool result/state exceeds size limit.")
     except BaseException as exc:
-        payload = json.dumps({"ok": False, "error": f"{type(exc).__name__}: {str(exc)[:1000]}"}).encode()
+        payload = json.dumps({"ok": False, "error": f"{type(exc).__name__}: {str(exc)[:1000]}", "cleanup_unverified": isinstance(exc,ExecutionCleanupError)}).encode()
     try:
         connection.send_bytes(payload)
     finally:
@@ -39,6 +39,8 @@ def invoke_transaction(handler, state, arguments, timeout, cancel_event=None):
                 process.join(timeout=max(0.0, deadline - time.monotonic()))
                 if process.is_alive() or time.monotonic() > deadline:
                     raise ToolDeadlineError("Tool did not finish within its deadline.")
+                if result.get("cleanup_unverified") is True:
+                    raise ExecutionCleanupError(result.get("error","Tool cleanup was not verified"))
                 if process.exitcode != 0 or not result["ok"]:
                     raise RuntimeError(result.get("error", "Tool process failed."))
                 return result["result"], result["state"]
