@@ -18,6 +18,13 @@ def test_repro_export_defaults_to_metadata_and_drops_detected_secrets():
     assert changed and secret not in str(data) and 'private' not in str(data)
     assert data['note']=='safe'
 
+@pytest.mark.parametrize('value,pointer',[({'rows':['private']},'/rows/-1'),({'rows':['private']},'/rows/00'),({'~2':'private'},'/~2')])
+def test_redaction_rejects_noncanonical_pointer_aliases(value,pointer):
+    from agentguard.regression.repro import sanitize
+    with pytest.raises(ValueError):sanitize(value,[pointer])
+    masked,changed=sanitize({'rows':['private'],'~/':'hidden'},['/rows/0','/~0~1'])
+    assert changed and masked=={'rows':['[REDACTED]'],'~/':'[REDACTED]'}
+
 def test_repro_rejects_unknown_version_and_offline_scope_escape():
     from agentguard.regression.repro import ReproBundle,offline_plan
     with pytest.raises(ValueError):ReproBundle(schema_version=2,kind='agentguard.repro',source_digest='0'*64,signature='1'*64,evidence_digest='2'*64)

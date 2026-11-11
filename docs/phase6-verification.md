@@ -198,6 +198,28 @@ Scheduled gerçek Docker kontrolü 2 case × 3 örnek; release 2 × 5 örnekte g
 mevcut ve hatalı source'u çalıştırdı. Mevcut ALLOW, hatalı source assertion/state
 mutation gerekçeleriyle BLOCK oldu. `artifacts/phase6-profile-scheduled` ve
 `artifacts/phase6-profile-release` metadata ve ürün JSON/HTML/JUnit raporlarını tutar.
-Yeni temiz wheel ve GitHub CI kabul kontrolleri devam ediyor.
-Sonuçlar doğrulanmadan Phase 6 tamamlandı olarak işaretlenmez.
+Son koddan izole sdist ve sdist'ten wheel build başarılı. Checkout dışındaki
+runtime-only temiz kurulum `artifacts/phase6-final-wheel.json` içinde passed:
+CLI/verdict parity, Phase 3/4/5 özellikleri, gerçek Docker worker ve
+`phase6_baseline=true`, `phase6_regression=true`. Kurulu wheel'den active baseline
+ve current/known-bad gate raporları da doğrulandı. `real_llm_verified=false`
+offline kontrolün sınırıdır; Phase 5'in kullanıcı canlı kanıtı korunur.
+
+Uygulama commit'i `ab3721aa2be7f28756cca847cba6a99e3ba77033`, dal `codex/development`.
+[Kaynak CI 43072800532](https://github.com/EgeBasturmen/agentguard/actions/runs/43072800532)
+13/13 başarılı oldu. Sonraki redaction düzeltmesini bu eski CI koşusu kapsamaz.
+Son kodun sonuçları doğrulanmadan Phase 6 tamamlandı olarak işaretlenmez.
 Yeni canlı LLM/API çağrısı, IAM değişikliği veya kullanıcı dosyası taşıma yapılmadı.
+
+### Son export güvenlik düzeltmesi
+
+İlk CI beklenirken yapılan ikinci export incelemesinde JSON pointer doğrulamasının
+`/rows/-1`, `/rows/00` ve geçersiz `~2` escape'ini kabul edip maskeleme walk'ıyla
+aynı alanı eşlemeyebildiği görüldü. Üç regression önce RED çalıştı. Canonical liste
+indeksi ve standart `~0`/`~1` escape zorunlu kılındı; geçerli pointer'ların gerçek
+maskelemesi de doğrulandı. Negatif/alias indeksle sessiz redaction bypass yapılamaz.
+
+Son kodun tam suite'i **664/664 başarılı**: 382 unit, 235 integration, 47 gerçek
+Docker, failure/error/skip yok; 318,12 saniye. Phase 0–5'in 631 testi korunur,
+Phase 6 toplam 33 yeni case içerir. JUnit: `artifacts/phase6-redaction-final-tests.xml`.
+Yeni izole sdist/wheel build başarılı; son temiz kurulum ve yeni CI kontrolü bekleniyor.

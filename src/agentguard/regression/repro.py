@@ -52,7 +52,9 @@ def sanitize(value,paths):
         if not pointer.startswith('/') or len(pointer)>1024:raise ValueError('JSON pointer redaction path required')
         node=value
         for part in pointer[1:].split('/'):
+            if re.search(r'~(?![01])',part):raise ValueError('Invalid JSON pointer escape')
             part=part.replace('~1','/').replace('~0','~')
+            if isinstance(node,list) and not re.fullmatch(r'0|[1-9][0-9]*',part):raise ValueError('Canonical array index required')
             try:node=node[int(part)] if isinstance(node,list) else node[part]
             except (ValueError,KeyError,IndexError,TypeError):raise ValueError('Unknown redaction path') from None
     return walk(value),changed[0]
