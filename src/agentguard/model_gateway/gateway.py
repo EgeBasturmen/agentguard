@@ -12,7 +12,7 @@ import re
 import threading
 import time
 from typing import Literal, Protocol
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator, model_serializer
 from agentguard.core.manifest import canonical_json, digest
 from agentguard.integrations.plan_config import EndpointConfig
 from agentguard.integrations.http import request_json
@@ -80,26 +80,100 @@ class ProviderResponseError(ValueError):
     def __init__(self,code):self.code=code;super().__init__(code)
 
 
+RPC_STATUSES=frozenset({'INVALID_ARGUMENT','FAILED_PRECONDITION','PERMISSION_DENIED','UNAUTHENTICATED',
+    'NOT_FOUND','RESOURCE_EXHAUSTED','INTERNAL','UNAVAILABLE','DEADLINE_EXCEEDED','UNIMPLEMENTED',
+    'OUT_OF_RANGE','UNKNOWN','ABORTED','CANCELLED','ALREADY_EXISTS'})
+RPC_REASONS=frozenset({'API_KEY_INVALID','API_KEY_EXPIRED','API_KEY_NOT_FOUND','API_KEY_REVOKED',
+    'API_KEY_SERVICE_BLOCKED','API_KEY_HTTP_REFERRER_BLOCKED','API_KEY_IP_ADDRESS_BLOCKED',
+    'API_KEY_ANDROID_APP_BLOCKED','API_KEY_IOS_APP_BLOCKED','SERVICE_DISABLED','BILLING_DISABLED',
+    'CONSUMER_INVALID','ACCESS_TOKEN_SCOPE_INSUFFICIENT','ACCESS_TOKEN_TYPE_UNSUPPORTED'})
+RPC_FIELDS=frozenset({'model','contents','contents[].role','contents[].parts','contents[].parts[].text',
+    'systemInstruction','systemInstruction.parts','systemInstruction.parts[].text','generationConfig',
+    'generationConfig.maxOutputTokens','generationConfig.responseMimeType','generationConfig.responseJsonSchema',
+    'generationConfig.candidateCount','generationConfig.temperature','generationConfig.topP','generationConfig.topK'})
+
+
+class ProviderHTTPDetails(Model):
+    http_status: int=Field(ge=400,le=599)
+    status: str|None=None
+    reasons: list[str]=Field(default_factory=list,max_length=16)
+    fields: list[str]=Field(default_factory=list,max_length=16)
+
+    @model_validator(mode='after')
+    def check_allowlist(self):
+        if self.status is not None and self.status not in RPC_STATUSES:raise ValueError('Unknown provider status')
+        if any(value not in RPC_REASONS for value in self.reasons):raise ValueError('Unknown provider reason')
+        if any(value not in RPC_FIELDS for value in self.fields):raise ValueError('Unknown provider field')
+        return self
+
+
+class GeminiHTTPError(RuntimeError):
+    """Only fixed vocabulary survives; no message, metadata, localized text or raw body."""
+    def __init__(self,details):
+        self.details=details
+        super().__init__('HTTP status '+str(details.http_status))
+
+    @classmethod
+    def from_response(cls,http_status,body):
+        from agentguard.integrations.http import _json
+        summary=ProviderHTTPDetails(http_status=http_status)
+        try:
+            parsed=_json(body)
+            error=parsed.get('error') if isinstance(parsed,dict) else None
+            if not isinstance(error,dict):return cls(summary)
+            if 'code' in error and (type(error['code']) is not int or error['code']!=http_status):return cls(summary)
+            status=error.get('status')
+            if isinstance(status,str) and status in RPC_STATUSES:summary.status=status
+            details=error.get('details',[])
+            for item in (details[:16] if isinstance(details,list) else []):
+                if not isinstance(item,dict):continue
+                if item.get('@type')=='type.googleapis.com/google.rpc.ErrorInfo':
+                    reason=item.get('reason')
+                    if isinstance(reason,str) and reason in RPC_REASONS and reason not in summary.reasons:summary.reasons.append(reason)
+                elif item.get('@type')=='type.googleapis.com/google.rpc.BadRequest':
+                    violations=item.get('fieldViolations',[])
+                    for violation in (violations[:16] if isinstance(violations,list) else []):
+                        field=violation.get('field') if isinstance(violation,dict) else None
+                        if not isinstance(field,str) or len(field)>256:continue
+                        field=re.sub(r'\[[0-9]{1,3}\]','[]',field)
+                        # protobuf field paths may use snake_case; map only known identifiers.
+                        for snake,camel in {'system_instruction':'systemInstruction','generation_config':'generationConfig',
+                            'max_output_tokens':'maxOutputTokens','response_mime_type':'responseMimeType',
+                            'response_json_schema':'responseJsonSchema','candidate_count':'candidateCount',
+                            'top_p':'topP','top_k':'topK'}.items():
+                            field='.'.join(camel if part==snake else part for part in field.split('.'))
+                        if field in RPC_FIELDS and field not in summary.fields and len(summary.fields)<16:summary.fields.append(field)
+        except Exception:
+            # Malformed/non-JSON errors still preserve HTTP status; never echo parsing errors.
+            return cls(ProviderHTTPDetails(http_status=http_status))
+        return cls(summary)
+
+
 class GeminiProvider:
     """Gemini REST generateContent text-only adapter; hidden thinking is charged too."""
     def generate(self,config,messages,max_output_tokens,*,secret,cancel_event):
         from agentguard.integrations.http import Endpoint
         if not secret:raise ProviderResponseError('CREDENTIAL_UNAVAILABLE')
+        # Gemini 3+ migration guide requires omitting candidate_count; newer models
+        # also deprecate sampling controls. Use the server's single-candidate default
+        # and retain strict response cardinality/usage checks below. No retry/fallback.
         body={'contents':[{'role':'model' if row['role']=='assistant' else 'user','parts':[{'text':row['content']}]} for row in messages],
-              'generationConfig':{'maxOutputTokens':max_output_tokens,'temperature':0,'candidateCount':1}}
+              'generationConfig':{'maxOutputTokens':max_output_tokens}}
         if config.system_prompt:body['systemInstruction']={'parts':[{'text':config.system_prompt}]}
         if config.response_format=='json':body['generationConfig']['responseMimeType']='application/json'
         data,_,_=request_json(Endpoint('https://generativelanguage.googleapis.com',timeout_seconds=config.timeout_seconds),
-            'POST','/v1beta/models/'+config.model+':generateContent',body,headers={'x-goog-api-key':secret},cancel_event=cancel_event)
+            'POST','/v1beta/models/'+config.model+':generateContent',body,headers={'x-goog-api-key':secret},cancel_event=cancel_event,
+            accepted=(200,),error_factory=GeminiHTTPError.from_response)
         candidates=data.get('candidates',[])
         if len(candidates)==1 and candidates[0].get('finishReason')=='MAX_TOKENS':raise ProviderResponseError('PROVIDER_MAX_TOKENS')
         if data.get('promptFeedback',{}).get('blockReason') or len(candidates)!=1 or candidates[0].get('finishReason')!='STOP':raise ProviderResponseError('PROVIDER_BLOCKED_OR_INCOMPLETE')
         parts=candidates[0].get('content',{}).get('parts',[])
         if not parts or any(set(part)-{'text','thought','thoughtSignature'} or not isinstance(part.get('text'),str) for part in parts):raise ValueError('Unsupported non-text provider response')
         text=''.join(part['text'] for part in parts if not part.get('thought'))
-        usage=data.get('usageMetadata',{})
+        usage=data.get('usageMetadata')
+        if not isinstance(usage,dict) or not {'promptTokenCount','totalTokenCount'}<=usage.keys():raise ProviderResponseError('PROVIDER_USAGE_MISSING')
         prompt=usage['promptTokenCount'];total=usage['totalTokenCount'];response=usage.get('candidatesTokenCount',0);thoughts=usage.get('thoughtsTokenCount',0)
-        if any(type(value) is not int or value<0 for value in (prompt,total,response,thoughts)) or total!=prompt+response+thoughts or usage.get('toolUsePromptTokenCount',0):raise ValueError('Missing or inconsistent provider usage')
+        if any(type(value) is not int or value<0 for value in (prompt,total,response,thoughts)) or total!=prompt+response+thoughts or usage.get('toolUsePromptTokenCount',0):raise ProviderResponseError('PROVIDER_USAGE_INCONSISTENT')
         return ProviderResult(text.replace(secret,'[REDACTED]'),prompt,total-prompt,data['modelVersion'].replace(secret,'[REDACTED]'))
 
 
@@ -131,6 +205,13 @@ class ModelCall(Model):
     estimated_cost_micro_usd: int=Field(default=0,ge=0)
     model_version: str=''
     error_code: str|None=None
+    provider_error: ProviderHTTPDetails|None=None
+
+    @model_serializer(mode='wrap')
+    def serialize(self,handler):
+        data=handler(self)
+        if self.provider_error is None:data.pop('provider_error',None)
+        return data
 
 
 class GatewayEvidence(Model):
@@ -146,6 +227,9 @@ class GatewayEvidence(Model):
         if self.status=='passed' and any(row.status!='completed' or row.usage_source!=('mock' if self.mode=='mock' else 'provider-reported') for row in self.calls):raise ValueError('Unsettled usage cannot pass')
         if self.status=='passed' and (len(self.calls)>self.config.max_calls or sum(row.input_tokens+row.output_tokens for row in self.calls)>self.config.max_total_tokens or sum(row.estimated_cost_micro_usd for row in self.calls)>self.config.max_cost_micro_usd):raise ValueError('Usage budget exceeded')
         for row in self.calls:
+            if row.provider_error is not None:
+                details=ProviderHTTPDetails.model_validate(row.provider_error.model_dump())
+                if row.status!='error' or row.usage_source!='unknown' or row.error_code!='HTTP_'+str(details.http_status):raise ValueError('HTTP error contradicts usage status')
             expected_cost=(row.input_tokens*self.config.input_rate_micro_usd_per_million+row.output_tokens*self.config.output_rate_micro_usd_per_million+999999)//1000000
             if row.status=='completed' and (not row.model_version or row.input_tokens+row.output_tokens>row.reserved_tokens or row.estimated_cost_micro_usd!=expected_cost or row.estimated_cost_micro_usd>row.reserved_cost_micro_usd):raise ValueError('Usage/pricing reservation mismatch')
         expected=digest(self.model_dump(mode='json',exclude={'fingerprint'}))
@@ -190,7 +274,8 @@ class ModelGateway:
             secret=os.environ.get('GEMINI_API_KEY') if config.provider=='gemini' else None
             result=self.provider.generate(config,rows,args.max_output_tokens,secret=secret,cancel_event=self.cancel)
             if not isinstance(result.text,str) or not result.text or len(result.text.encode())>8192 or not isinstance(result.model_version,str) or not result.model_version or len(result.model_version)>200:raise ValueError('Invalid model output')
-            if any(type(n) is not int or n<0 for n in (result.input_tokens,result.output_tokens)) or result.input_tokens>reserved-args.max_output_tokens or result.output_tokens>args.max_output_tokens:raise ValueError('Provider usage exceeded reservation')
+            if any(type(n) is not int or n<0 for n in (result.input_tokens,result.output_tokens)):raise ProviderResponseError('PROVIDER_USAGE_INCONSISTENT')
+            if result.input_tokens>reserved-args.max_output_tokens or result.output_tokens>args.max_output_tokens:raise ProviderResponseError('PROVIDER_USAGE_RESERVATION_EXCEEDED')
             with self._lock:
                 call.status='completed';call.usage_source='mock' if config.mode=='mock' else 'provider-reported'
                 call.input_tokens=result.input_tokens;call.output_tokens=result.output_tokens
@@ -199,13 +284,15 @@ class ModelGateway:
         except Exception as exc:
             from agentguard.execution.errors import ExecutionTimeout,ExecutionCancelled
             code='MODEL_CALL_UNVERIFIED'
-            if isinstance(exc,ProviderResponseError) and exc.code in {'CREDENTIAL_UNAVAILABLE','PROVIDER_MAX_TOKENS','PROVIDER_BLOCKED_OR_INCOMPLETE'}:code=exc.code
+            if isinstance(exc,ProviderResponseError) and exc.code in {'CREDENTIAL_UNAVAILABLE','PROVIDER_MAX_TOKENS','PROVIDER_BLOCKED_OR_INCOMPLETE','PROVIDER_USAGE_MISSING','PROVIDER_USAGE_INCONSISTENT','PROVIDER_USAGE_RESERVATION_EXCEEDED'}:code=exc.code
             elif isinstance(exc,ExecutionTimeout):code='MODEL_TIMEOUT'
             elif isinstance(exc,ExecutionCancelled):code='MODEL_CANCELLED'
             elif isinstance(exc,(ValueError,KeyError,TypeError)):code='MODEL_RESPONSE_INVALID'
             elif isinstance(exc,OSError):code='MODEL_TLS_OR_NETWORK_ERROR'
             elif isinstance(exc,RuntimeError) and re.fullmatch(r'HTTP status [1-5][0-9]{2}',str(exc)):code='HTTP_'+str(exc)[-3:]
             with self._lock:call.status='error';call.error_code=code;self._status='unverified'
+            if isinstance(exc,GeminiHTTPError):
+                with self._lock:call.provider_error=exc.details.model_copy(deep=True)
             # Provider/transport exceptions may contain credentials; never chain/log their text.
             raise RuntimeError('Model call failed ['+code+']; usage remains reserved and unverified') from None
         finally:

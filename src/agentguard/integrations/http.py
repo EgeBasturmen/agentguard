@@ -65,7 +65,12 @@ def _json(data):
     return value
 
 
-def request_json(endpoint, method, path='/', body=None, *, headers=None, query=None, cancel_event=None, accepted=(200,201,202,204)):
+def request_json(endpoint, method, path='/', body=None, *, headers=None, query=None, cancel_event=None, accepted=(200,201,202,204), error_factory=None):
+    """An optional trusted adapter can reduce bounded error bytes to a safe exception.
+
+    No response body is attached to the default exception. The factory must never
+    retain/log free text; origin, byte limits, deadlines and redirects stay enforced.
+    """
     endpoint.__post_init__()
     validate_path(path)
     method=method.upper()
@@ -126,7 +131,9 @@ def request_json(endpoint, method, path='/', body=None, *, headers=None, query=N
             data.extend(chunk)
             if len(data)>endpoint.max_bytes: raise ValueError('HTTP response too large')
         check()
-        if response.status not in accepted: raise RuntimeError(f'HTTP status {response.status}')
+        if response.status not in accepted:
+            if error_factory is not None:raise error_factory(response.status,bytes(data)) from None
+            raise RuntimeError(f'HTTP status {response.status}')
         response_headers={k.lower():v for k,v in response.getheaders()}
         if data:
             if response_headers.get('content-type','').split(';')[0]!='application/json': raise ValueError('Expected JSON HTTP response; SSE is unsupported')

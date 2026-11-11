@@ -130,3 +130,28 @@ def test_gemini_live_check_harness_is_verified_offline_without_calling_gemini(tm
     result=verify('gemini-3.5-flash-lite')
     assert result['status']=='passed',result
     assert len(calls)==5 and result['budget_denied_before_network']
+
+
+def test_gemini_structured_http_error_survives_worker_broker_and_safe_report(monkeypatch):
+    """Real controlled worker; the HTTP error is an offline fixture, not Gemini."""
+    import json
+    import agentguard.model_gateway.gateway as module
+    from scripts.check_gemini import verify
+    secret='offline-secret-response-body'
+    calls=[]
+    def reject(*args,**kwargs):
+        calls.append(1)
+        raise module.GeminiHTTPError.from_response(400,json.dumps({'error':{'code':400,
+            'status':'INVALID_ARGUMENT','message':secret,'details':[{
+                '@type':'type.googleapis.com/google.rpc.ErrorInfo','reason':'API_KEY_INVALID',
+                'metadata':{'consumer':secret}}]}}).encode())
+    monkeypatch.setenv('GEMINI_API_KEY',secret)
+    monkeypatch.setattr(module,'request_json',reject)
+    result=verify('gemini-3.5-flash-lite',single_agent=True)
+    assert result['status']=='incomplete' and result['phase5_complete'] is False
+    assert result['stage']=='first_agent' and result['diagnostic']['category']=='credentials'
+    assert result['diagnostic']['provider_reasons']==['API_KEY_INVALID']
+    assert result['runs'][0]['cleanup_status']=='verified'
+    assert result['runs'][0]['status']=='error'
+    assert result['gateways'][0]['status']=='unverified' and len(calls)==1
+    assert result['actual_api_calls'] is None and secret not in json.dumps(result)

@@ -85,3 +85,68 @@ def test_gemini_truncation_has_a_safe_actionable_error_code(monkeypatch):
     gateway=module.ModelGateway(module.GatewayConfig(provider='gemini',model='fixture'))
     with pytest.raises(RuntimeError):gateway.generate([dict(role='user',content='ready')],max_output_tokens=32)
     assert gateway.evidence().calls[0].error_code=='PROVIDER_MAX_TOKENS'
+
+
+@pytest.mark.parametrize('response_format',['text','json'])
+@pytest.mark.parametrize('system_prompt',['','Return only the requested JSON.'])
+def test_gemini_generate_content_request_matches_minimal_rest_contract(monkeypatch,response_format,system_prompt):
+    """Offline wire contract, not proof that the live service accepts a request.
+
+    Google migration guide requires omitting candidate_count and sampling parameters:
+    https://aistudio.google.com/docs/whats-new-gemini-3.6#api-changes-and-parameter-updates
+    """
+    import agentguard.model_gateway.gateway as module
+    secret='offline-contract-key';monkeypatch.setenv('GEMINI_API_KEY',secret)
+    requests=[]
+    def request(endpoint,method,path,body,**kwargs):
+        requests.append(body)
+        assert endpoint.base_url=='https://generativelanguage.googleapis.com'
+        assert method=='POST' and path=='/v1beta/models/gemini-3.5-flash-lite:generateContent'
+        assert kwargs['headers']=={'x-goog-api-key':secret}
+        assert secret not in str(body) and secret not in path
+        expected={'contents':[
+            {'role':'user','parts':[{'text':'Earlier question'}]},
+            {'role':'model','parts':[{'text':'Earlier answer'}]},
+            {'role':'user','parts':[{'text':'Return ready'}]}],
+            'generationConfig':{'maxOutputTokens':256}}
+        if response_format=='json':expected['generationConfig']['responseMimeType']='application/json'
+        if system_prompt:expected['systemInstruction']={'parts':[{'text':system_prompt}]}
+        # Reject undocumented additions as well as deprecated/unsupported parameters.
+        assert body==expected
+        return dict(candidates=[dict(finishReason='STOP',content={'parts':[{'text':'{"status":"ready"}'}]})],
+            usageMetadata=dict(promptTokenCount=12,candidatesTokenCount=6,totalTokenCount=18),modelVersion='offline-v1'),{},200
+    monkeypatch.setattr(module,'request_json',request)
+    gateway=module.ModelGateway(module.GatewayConfig(provider='gemini',model='gemini-3.5-flash-lite',
+        response_format=response_format,system_prompt=system_prompt,max_output_tokens=256))
+    assert gateway.generate([dict(role='user',content='Earlier question'),dict(role='assistant',content='Earlier answer'),
+        dict(role='user',content='Return ready')],max_output_tokens=256)=='{"status":"ready"}'
+    evidence=gateway.evidence()
+    assert len(requests)==1 and evidence.status=='passed'
+    assert evidence.calls[0].usage_source=='provider-reported'
+    assert evidence.calls[0].input_tokens==12 and evidence.calls[0].output_tokens==6
+
+
+def test_gemini_omitting_candidate_count_still_rejects_multiple_response_candidates(monkeypatch):
+    import agentguard.model_gateway.gateway as module
+    monkeypatch.setenv('GEMINI_API_KEY','offline-key')
+    monkeypatch.setattr(module,'request_json',lambda *a,**k:({'candidates':[
+        {'finishReason':'STOP','content':{'parts':[{'text':'one'}]}},
+        {'finishReason':'STOP','content':{'parts':[{'text':'two'}]}}]}, {},200))
+    gateway=module.ModelGateway(module.GatewayConfig(provider='gemini',model='gemini-3.5-flash-lite'))
+    with pytest.raises(RuntimeError):gateway.generate([dict(role='user',content='ready')],max_output_tokens=32)
+    call=gateway.evidence().calls[0]
+    assert call.error_code=='PROVIDER_BLOCKED_OR_INCOMPLETE' and call.usage_source=='unknown'
+    assert call.reserved_tokens>0 and gateway.evidence().status=='unverified'
+
+
+def test_gemini_thinking_tokens_remain_charged_as_output(monkeypatch):
+    import agentguard.model_gateway.gateway as module
+    monkeypatch.setenv('GEMINI_API_KEY','offline-key')
+    monkeypatch.setattr(module,'request_json',lambda *a,**k:(dict(candidates=[dict(finishReason='STOP',
+        content={'parts':[{'text':'private reasoning','thought':True},{'text':'ready'}]})],
+        usageMetadata=dict(promptTokenCount=5,candidatesTokenCount=2,thoughtsTokenCount=3,totalTokenCount=10),modelVersion='offline-v1'),{},200))
+    gateway=module.ModelGateway(module.GatewayConfig(provider='gemini',model='gemini-3.5-flash-lite'))
+    assert gateway.generate([dict(role='user',content='ready')],max_output_tokens=32)=='ready'
+    call=gateway.evidence().calls[0]
+    assert call.input_tokens==5 and call.output_tokens==5
+    assert call.estimated_cost_micro_usd==55
