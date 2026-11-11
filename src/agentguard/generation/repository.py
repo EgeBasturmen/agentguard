@@ -3,6 +3,7 @@ from copy import deepcopy
 from pathlib import Path
 import json
 import sqlite3
+from contextlib import contextmanager
 from agentguard.core.manifest import digest
 from agentguard.generation.models import Model,Candidate,Source,definitions
 from agentguard.generation.validation import validate_candidate
@@ -41,7 +42,12 @@ class ScenarioRepository:
             rows=db.execute('SELECT version FROM agentguard_meta').fetchall()
             if not rows:db.execute('INSERT INTO agentguard_meta VALUES(1)')
             elif rows!=[(1,)]:raise ValueError('Unsupported repository schema')
-    def _connect(self):return sqlite3.connect(self.path,timeout=10)
+    @contextmanager
+    def _connect(self):
+        connection=sqlite3.connect(self.path,timeout=10)
+        try:
+            with connection:yield connection
+        finally:connection.close()
     def _load(self,db,identity,revision):
         row=db.execute('SELECT payload,digest,status,review FROM cases WHERE id=? AND revision=?',(identity,revision)).fetchone()
         if row is None:raise KeyError('Unknown scenario revision')

@@ -2,5 +2,7 @@ include tests/conftest.py
 include tests/phase3_service.py
 include tests/phase5_service.py
 include scripts/check_gemini.py
+include scripts/check_phase6.py
+include examples/phase6_agent.py
 include scripts/check_wheel.py
 include scripts/phase5_wheel_probe.py

@@ -238,3 +238,22 @@ hatası ve belirsizlik PASS değildir; judge safety/policy FAIL'ini geçersiz k�
 `python scripts/check_gemini.py` canlı test planını sıfır API çağrısıyla gösterir.
 Canlı kullanım yalnızca açık onayla ve `GEMINI_API_KEY` üzerinden yapılır.
 [Destek profilleri, kurulum, doğrulama ve sınırlar](docs/phase5-verification.md).
+
+## Phase 6 regression ve CI
+
+`agentguard baseline` immutable approved suite/artifact kayıtlarını create, approve,
+promote ve retire eder. `agentguard release repeat` bağımsız attempt'leri korur;
+`agentguard release gate` aktif baseline ile ortak SDK gate kararını JSON/HTML/JUnit
+olarak verir. PR/scheduled/release kapsamları, kritik case'ler, bounded tolerans,
+Wilson belirsizlik aralıkları ve süreli quarantine desteklenir. Quarantine, eksik
+kanıt veya retry geçmişindeki hata gizlenerek PASS üretilemez.
+
+`agentguard release export-repro` varsayılan metadata export'u; açık veri izniyle
+local Python/offline replay ve `release reproduce` source hash kontrollü Docker
+yeniden üretimi sağlar. Repro release onayı değildir; serbest metin için genel PII
+filtreleme garantisi verilmez. Yerel baseline audit'i SaaS kimlik/RBAC yerine geçmez.
+
+`python scripts/check_phase6.py --profile pr --output artifacts/phase6-new-check`
+gerçek Docker'da mevcut source'u ve bilerek hatalı varyantını frozen oracle altında
+kontrol eder; ücretli API çağırmaz. Çıktı dizinindeki mevcut raporları değiştirmez.
+[Kabul kriterleri, CLI/API sözleşmesi, kanıtlar ve sınırlar](docs/phase6-verification.md).

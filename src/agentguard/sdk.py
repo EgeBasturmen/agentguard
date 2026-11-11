@@ -14,3 +14,8 @@ from agentguard.generation.coverage import coverage
 from agentguard.model_gateway.gateway import GatewayConfig,ModelGateway,ModelProvider,ProviderResult,GatewayEvidence
 from agentguard.evaluation.specs import EvaluationSpec,Fault,Turn
 from agentguard.evaluation.registry import EvaluationFinding,evaluate
+from agentguard.regression.baseline import BaselineRepository,FrozenBaseline
+from agentguard.regression.repeats import RepeatRunner,RepeatPolicy,RepeatBatch,compare_repeats
+from agentguard.regression.profiles import SuiteProfile,select_profile,export_reports
+from agentguard.regression.repro import ExportPolicy,ReproBundle,make_bundle,reproduce
+from agentguard.regression.gate import GateAPI,GateDecision

@@ -1,9 +1,19 @@
-name: Phase 1 validation
+name: AgentGuard validation
 
 "on":
   push:
   pull_request:
   workflow_dispatch:
+    inputs:
+      suite_profile:
+        description: Approved regression profile
+        type: choice
+        default: pr
+        options: [pr, scheduled, release]
+  schedule:
+    - cron: '23 3 * * 1'
+  release:
+    types: [published]
 
 permissions:
   contents: read
@@ -104,6 +114,10 @@ jobs:
         run: |
           python -m build --outdir artifacts/dist
           python scripts/check_wheel.py artifacts/dist --docker --result artifacts/docker-wheel-check.json
+      - name: Frozen baseline and real source regression gate (no external APIs)
+        env:
+          SUITE_PROFILE: ${{ github.event_name == 'release' && 'release' || github.event_name == 'schedule' && 'scheduled' || inputs.suite_profile || 'pr' }}
+        run: python scripts/check_phase6.py --profile "$SUITE_PROFILE" --output artifacts/phase6-gate
       - name: Retain Docker test evidence
         if: always()
         uses: actions/upload-artifact@v7

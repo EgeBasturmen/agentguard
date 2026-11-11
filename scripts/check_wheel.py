@@ -28,7 +28,7 @@ def check_wheel(wheel: Path, wheelhouse: Path | None = None, *, docker: bool = F
     for source_archive in wheel.parent.glob("agentguard-*.tar.gz"):
         with tarfile.open(source_archive) as archive:
             names=archive.getnames()
-            for support in ("tests/conftest.py","tests/phase3_service.py","tests/phase5_service.py","scripts/check_gemini.py"):
+            for support in ("tests/conftest.py","tests/phase3_service.py","tests/phase5_service.py","scripts/check_gemini.py","scripts/check_phase6.py","examples/phase6_agent.py"):
                 assert any(name.endswith('/'+support) for name in names), f"sdist misses {support}"
     with tempfile.TemporaryDirectory(prefix="agentguard-wheel-") as directory:
         work = Path(directory).resolve()
@@ -209,6 +209,33 @@ print(json.dumps({"version": distribution.version, "python": sys.version.split()
             matrix=json.loads(run([cli,"scenario","coverage",dataset,"--db",database,"--execution",generated_report]))
             assert any(row["passed"] for row in matrix["rows"]) and matrix["missing_executed"]
             details["phase4_generation"] = True
+            # Baseline evidence must come from this real installed-wheel Docker run.
+            baseline_db=work/"baselines.sqlite"
+            artifact_pins=work/"artifact-pins.json"
+            artifact_pins.write_text(json.dumps({case["id"]:member["run_manifest"]["source_digest"]}),encoding="utf-8")
+            baseline_options=["--db",baseline_db,"--scenario-db",database,"--actor","wheel-operator","--reason","Verified installed-wheel source"]
+            observed=member["run_manifest"]["source_digest"]
+            wrong_pins=work/"wrong-artifact-pins.json"
+            wrong_pins.write_text(json.dumps({case["id"]:('0' if observed[0]!='0' else '1')+observed[1:]}),encoding="utf-8")
+            run([cli,"baseline","create","release",generated_report,"--artifacts",wrong_pins,*baseline_options],expected=2)
+            frozen=json.loads(run([cli,"baseline","create","release",generated_report,"--artifacts",artifact_pins,*baseline_options]))
+            key=frozen["fingerprint"]
+            run([cli,"baseline","promote",key,*baseline_options],expected=2)
+            run([cli,"baseline","approve",key,*baseline_options])
+            run([cli,"baseline","promote",key,*baseline_options])
+            active=json.loads(run([cli,"baseline","show","release","--db",baseline_db]))
+            assert active["fingerprint"]==key and active["suite"]==generated_evidence["snapshot"]["fingerprint"]
+            assert [event["action"] for event in active["history"]]==["create","approve","promote"]
+            run([cli,"baseline","retire",key,"--db",baseline_db,"--actor","wheel-operator","--reason","End fixture"])
+            run([cli,"baseline","show","release","--db",baseline_db],expected=2)
+            details["phase6_baseline"] = True
+            phase6_probe=work/'check_phase6.py'
+            phase6_probe.write_bytes(Path(__file__).with_name('check_phase6.py').read_bytes())
+            candidate=work/'phase6_agent.py'
+            candidate.write_bytes(Path(__file__).resolve().parents[1].joinpath('examples/phase6_agent.py').read_bytes())
+            phase6=json.loads(run([python,'-I',phase6_probe,'--candidate',candidate,'--profile','pr','--output',work/'phase6-gate']))
+            assert phase6['current_gate']=='ALLOW' and phase6['known_bad_gate']=='BLOCK' and phase6['live_api_calls']==0
+            details['phase6_regression']=True
         phase5_probe=work/'phase5_wheel_probe.py'
         phase5_probe.write_bytes(Path(__file__).with_name('phase5_wheel_probe.py').read_bytes())
         details.update(json.loads(run([python,'-I',phase5_probe,'--cli',cli]+(['--docker'] if docker else []))))

@@ -268,14 +268,21 @@ CI ücretli API çağrısı yapmaz. Son uygulama commit'i
 11 artefakt, 21 JUnit ve 11 temiz wheel kaydı indirilip doğrulandı; test sayıları
 uyumlu, failure/error/skip yok. Önceki HTTP hata incelemeleri ve test kayıtları
 doğrulama raporunda tarihsel tutulur.
-Phase 6 başlatılmadı; ayrıca kullanıcı onayı gerekir.
+Phase 6 kullanıcı onayıyla başlatıldı; güncel durum aşağıdadır.
 Kapı: Aynı görev farklı model/prompt sürümleriyle karşılaştırılabiliyor; judge safety FAIL’i örtemiyor; maliyet kaynağı açık.
 Faz 6 — Regression ve CI [2–3 hafta]
-- AG-060: Baseline lifecycle ve frozen manifests.
-- AG-061: Repeat runs, uncertainty, flaky policy ve toleranslar.
-- AG-062: PR/scheduled/release suite profiles, JUnit/JSON/HTML.
-- AG-063: Replay/repro bundle ve sensitive data export sınırı.
-- AG-064: Tek gate API, exit codes ve version compatibility.
+- AG-060: Baseline lifecycle ve frozen manifests. **Uygulandı; yerelde doğrulandı:** Ayrı BaselineRepository, approved suite/runtime/policy/evaluator/artifact pin'leri, create/approve/promote/retire, actor/reason/UTC ve hash zincirli audit, transaction/CAS ve stale approval reddi. Controlled source/image digest doğrulanır; observed HTTP artifact kimliği operatör beyanıdır. CLI ve kurulu wheel'den gerçek Docker suite akışı geçti. Yerel güvenilen operatör profili; SaaS RBAC/imza iddiası yoktur.
+- AG-061: Repeat runs, uncertainty, flaky policy ve toleranslar. **Uygulandı; yerelde doğrulandı:** Paired immutable attempt'ler, pass rate/Wilson aralıkları, örnek yeterliliği, bounded noncritical tool-count toleransı ve owner/expiry quarantine. Bütün hatalar korunur; yalnız tüm üyeler execution öncesi temiz provision hatası verirse bounded retry yapılır; retry bağımsız örnek sayılmaz.
+- AG-062: PR/scheduled/release suite profiles, JUnit/JSON/HTML. **Uygulandı; CI doğrulaması bekliyor:** Critical coverage düşürülemez, release tam kapsam ister; dışarıda kalan PR case'leri görünür. Aynı gate'ten veri minimize edilmiş üç rapor; gerçek source regresyonunu bloklayan Docker CI kontrolü. Schedule yalnız default branch'te otomatik işler; development dalına yapılandırma eklemek default branch deployment değildir.
+- AG-063: Replay/repro bundle ve sensitive data export sınırı. **Uygulandı; yerelde doğrulandı:** Varsayılan metadata, explicit per-field case-data onayı, bilinen secret/redaction kontrolleri, source hash ile offline Python/Docker + local environment/pinned replay. Redacted bundle runnable değildir; repro release approval vermez. Genel PII/DLP, HTTP/container/live-model offline repro iddiası yoktur.
+- AG-064: Tek gate API, exit codes ve version compatibility. **Uygulandı; yerelde doğrulandı:** SDK/CLI/JSON/HTML/JUnit ortak GateAPI; aktif approved baseline ve current scenario kontrolü; typed loader, sürüm/fingerprint/summary-forgery reddi. Exit 0 ALLOW, 1 doğrulanmış blok, 2 geçersiz evidence/operasyon; outcome altyapı ve belirsizliği ayırır.
+**Phase 6 devam ediyor:** Son kodda 661/661 test başarılı
+(379 unit, 235 integration, 47 gerçek Docker; skip/failure/error yok); Phase 0–5'in
+631 testi korundu. Scheduled ve release profillerinde gerçek source regresyonu
+gerekçeli BLOCK oldu; mevcut source ALLOW. Son temiz wheel ve GitHub CI kabul
+kontrolleri tamamlanmadan Phase 6 kapatılmaz.
+İnceleme, bağımlılıklar, riskler ve test kanıtı: `docs/phase6-verification.md`.
+Ücretli LLM/API çağrısı yapılmadı. Main ve kullanıcı dosyaları korunur.
 Kapı: Gerçek bir değişiklik CI’da nedenleriyle bloklanıyor; aynı veri bütün yüzeylerde aynı kararı üretiyor.
 Faz 7 — Web yönetimi ve private-runner pilot [4–6 hafta]
 - AG-070: Auth/workspace/project ve API scopes.

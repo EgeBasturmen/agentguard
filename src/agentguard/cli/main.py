@@ -634,6 +634,10 @@ def demo_command(
 
 from agentguard.generation.cli import app as scenario_app
 app.add_typer(scenario_app,name="scenario")
+from agentguard.regression.cli import app as baseline_app
+app.add_typer(baseline_app,name="baseline")
+from agentguard.regression.release_cli import app as release_app
+app.add_typer(release_app,name="release")
 
 if __name__ == "__main__":
     app()
