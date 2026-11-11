@@ -38,6 +38,11 @@ def run_tests(config,files,cancel_event=None,run_deadline=None):
         context=Path(directory);(context/'code').mkdir()
         for name,content in files.items():
             path=context/'code'/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text(content,encoding='utf-8',newline='')
+        actual={}
+        for path in (context/'code').rglob('*'):
+            if path.is_symlink():raise MissingEvidence('Symlink in coding materialization')
+            if path.is_file():actual[path.relative_to(context/'code').as_posix()]=path.read_bytes().decode('utf-8')
+        if actual!=files:raise MissingEvidence('Materialized coding snapshot differs from observed file identities/bytes')
         (context/'Dockerfile').write_text('FROM '+base+'\nCOPY code /opt/code\nENV PYTHONDONTWRITEBYTECODE=1\nUSER 65534:65534\nENTRYPOINT '+json.dumps(['python','-I','/opt/code/'+entry])+'\n',encoding='utf-8')
         image=command(['docker','build','--network=none','--pull=false','--quiet',str(context)],deadline,cancel_event).splitlines()[-1]
     if not re.fullmatch(r'sha256:[0-9a-f]{64}',image):raise MissingEvidence('Invalid coding test image identity')

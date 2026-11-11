@@ -121,3 +121,19 @@ def test_coding_snapshot_case_aliases_are_rejected_before_build_or_host_writes(m
     from agentguard.evaluation.registry import MissingEvidence
     monkeypatch.setattr(coding,'command',lambda *args,**kwargs:pytest.fail('Unsafe snapshot reached Docker/build'))
     with pytest.raises(MissingEvidence):coding.run_tests({'entrypoint':'main.py','cases':[{'arguments':[],'expected_stdout':'ready'}],'timeout_seconds':10},files)
+
+
+def test_coding_materialization_must_match_observed_bytes_before_image_build(monkeypatch):
+    from pathlib import Path
+    import json
+    from agentguard.evaluation import coding
+    from agentguard.evaluation.registry import MissingEvidence
+    original=Path.write_text
+    def corrupt(path,text,*args,**kwargs):
+        if path.name=='main.py':text="print('different program')"
+        return original(path,text,*args,**kwargs)
+    def command(args,*other):
+        if args[:3]==['docker','image','inspect']:return json.dumps([{'RepoDigests':['python@sha256:'+'a'*64]}])
+        pytest.fail('Unverified materialized code reached image build')
+    monkeypatch.setattr(Path,'write_text',corrupt);monkeypatch.setattr(coding,'command',command)
+    with pytest.raises(MissingEvidence):coding.run_tests({'entrypoint':'main.py','cases':[{'arguments':[],'expected_stdout':'ready'}],'timeout_seconds':10},{'main.py':"print('ready')"})
