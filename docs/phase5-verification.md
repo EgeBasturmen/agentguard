@@ -64,6 +64,9 @@ Remote HTTP agent'ın gateway dışı model kullanımı gözlenmiş gibi raporla
   Python entrypoint'in argv/stdout sonucu host'taki bağımsız beklenen değerle karşılaştırılır.
   Oracle/expected stdout test container'ına gönderilmez. Agent'ın PASS/test report beyanı kullanılmaz.
   Çevre whitespace normalize edilir; sonuç sonlu test vakaları içindir.
+  Aygıt/alias adları ve case çakışmaları dosya açılmadan reddedilir. Image build
+  öncesi materialize edilmiş gerçek dosya adları/byte'ları observed snapshot ile
+  karşılaştırılır; farklı veri aynı workspace hash'iyle test edilmiş sayılmaz.
 - `turn_output`: belirtilen turn çıktısı; declared turn tamamlanmadan gate geçmez.
 - `fault_recovery`: declared no-effect fault ve aynı tool'un sonradan gerçek completed çağrısı.
 - `judge`: her çalışmada ayrık positive/negative etiketlerle kalibrasyon; bilinmeyen/tekrarlı/
@@ -72,6 +75,10 @@ Remote HTTP agent'ın gateway dışı model kullanımı gözlenmiş gibi raporla
 Finding `pass/fail/error/inconclusive` taşır. Error, behavior failure'dan ayrılır.
 Tüm kontroller AND ile birleşir; judge state/policy/cleanup FAIL'ini örtemez.
 Eksik finding, usage, receipt, session üyesi veya değişen fingerprint gate'i engeller.
+Finding'ler hem spec hem before/after/output/audit/turn observation hash'ine bağlıdır.
+Output veya audit sonradan değiştirilip eski PASS finding'i bırakılamaz; snapshot
+ile mutation listesi de ortak gate'te karşılaştırılır. Hash'ler imza değildir ve
+güvenilen operatörün tüm veriyi yeniden üretmesine karşı authentication sağlamaz.
 Mock model/tool yeni business evaluator'larını da doğrulayamaz. CLI/JSON/HTML aynı
 core sonucu kullanır; yeni finding/model/session alanları escaped HTML'da gösterilir.
 
@@ -100,20 +107,64 @@ sürümü, model/prompt comparison, iki bağımsız aritmetik label ve bir judge
 ölçülür. Judge olumlu olsa bile gerçek broker policy reddi BLOCK kalmalıdır.
 Sonuç dosyası exclusive yazılır; var olan kullanıcı dosyası üzerine yazılmaz.
 
+Canlı deneme kayıtları (mevcut kullanıcı dosyaları değiştirilmedi):
+
+- `artifacts/phase5-gemini-live.json`: incomplete/ValueError; kullanıcı aynı
+  terminalde `api_key_present=false` bildirdi. Credential readiness için sıfır
+  çağrılı, explicit `CredentialUnavailable` kontrolü ve regression testi eklendi.
+- `artifacts/phase5-gemini-live-2.json`: first_agent aşamasında ERROR;
+  gateway ledger bir başarısız attempt, usage_source=unknown ve tutulan rezerv
+  kaydetti. Cleanup verified; kalan model/judge çağrılarına geçilmedi. Eski genel
+  `MODEL_CALL_UNVERIFIED` kodundan HTTP/timeout/finish nedeni çıkarılamaz.
+- Güvenli `HTTP_###`, `MODEL_TIMEOUT`, `MODEL_TLS_OR_NETWORK_ERROR`,
+  `PROVIDER_MAX_TOKENS` vb. kodları ayrı regression'larla eklendi. Anahtar veya
+  provider hata gövdesi açığa çıkarılmaz. Otomatik retry/fallback yapılmaz.
+- `--live --single-agent --result artifacts/phase5-gemini-diagnostic.json`
+  yalnızca bir agent/model çağrısı yapar (en fazla 256 output token, 2.500 token
+  rezervi, 0,005 USD yapılandırılmış tahmin); judge/comparison çalıştırmaz ve
+  `phase5_complete=false` kaydeder. Tek çağrılık tanı sonucu henüz yoktur.
+
+Dosya adlarında aygıt/alias ve taşınabilirlik sınırlarının gerekçesi:
+[Windows adlandırma kuralları](https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file).
+Linux'ta oluşturulabilen bazı taşınamayan isimler de artık reddedilir.
+
 Resmî referanslar (11 Kasım 2026): [generateContent/usage](https://ai.google.dev/api/generate-content),
 [Gemini model](https://ai.google.dev/gemini-api/docs/models/gemini-3.5-flash-lite),
 [fiyatlandırma](https://ai.google.dev/gemini-api/docs/pricing).
 
 ## Doğrulama kaydı
 
-Yerel tüm testler, temiz wheel ve GitHub CI çalışmaları sürüyor. Gerçek Gemini
-sonuç dosyası doğrulanmadan AG-050/054 canlı kabulü veya Phase 5 tamamlandı denmez.
-Phase 6 başlatılmadı.
+**AG-051/052/053/055 belgelenen profillerle doğrulandı. AG-050/054 kısmi;
+başarılı gerçek Gemini kanıtı bekliyor. Phase 5 kapatılmadı.**
+
+- Son uygulama kaynağı: `8c8011ff8a1a02fba1d0c836498fad48922a6883`.
+- Yerel tüm suite: **593 passed**, 343 unit + 205 integration + 45 gerçek Docker;
+  failure/error/skip yok. Phase 0–4'ün 544 case'i korunur, 49 yenidir.
+- İzole sdist ve sdist'ten wheel build başarılı. Temiz runtime-only kurulumda
+  checkout dışındaki CLI, Phase 2/3/4 akışları, model HTTP gateway, judge protokolü,
+  yeni evaluator ve çok turlu gerçek Docker worker akışı başarılı.
+- [Kaynak CI 42956806818](https://github.com/EgeBasturmen/agentguard/actions/runs/42956806818)
+  **13/13 başarılı**: Ubuntu 24.04 / Windows 2022 × Python 3.10–3.14 her job'da
+  343 unit + 205 integration ve temiz wheel; ayrı Docker job'ında 45 case ve
+  kurulu wheel'den gateway/session/önceki execution akışları. Lint ve zorunlu gate başarılı.
+- 11 artifact ZIP indirildi; **21 JUnit ve 11 wheel-check JSON** sayı/hata/skip
+  ve yeni feature flag'leriyle doğrulandı. `phase5_gateway`, `phase5_evaluations`
+  true; Docker kaydında `phase5_worker` true. Tümünde `real_llm_verified=false`;
+  ücretli Gemini CI'da otomatik çağrılmaz ve fixture gerçek LLM sayılmaz.
+- Main/Phase 2 remote ref'leri, özgün main HEAD/branch/index hash/status,
+  kullanıcı dosyaları ve mevcut rapor hash'leri başlangıç snapshot'ıyla eşleşir.
+  Key, .env, DB, user live result veya test artefaktı Git'e eklenmedi.
+
+Phase 6 başlatılmadı. Başarılı Gemini/prompt comparison/judge kanıtı ve Phase 5
+kapanışı olmadan sonraki faza geçilmez; ayrıca kullanıcı onayı gerekir.
 
 Yeni testler önce eksik özellikleri/hataları yeniden üretti: output-only senaryo,
 eksik temporal gözlem, invented citation, uncalibrated judge, budget rezervasyonu,
 multi-turn IPC, gateway/worker loading, recovery, key echo, usage silinmesi,
 audit prompt/usage ayrışması ve yeni business evaluator/mock bypass.
+Sync `asyncio.run` uyumluluğu, observation/output çelişkisi, credential readiness,
+provider safe error code ve portable artifact materialization testleri de önce
+başarısız çalıştırılmıştır.
 
 Başlıca dosyalar: `model_gateway/gateway.py`; `evaluation/specs.py`, `registry.py`,
 `judge.py`, `coding.py`; mevcut scenario/result/manifest/outcome, runner/controller,
@@ -121,6 +172,8 @@ ToolBroker/records/faults, worker/lifecycle/ProcessIPC; integration plan/config/
 generation model/validation, comparator/models, SDK/report export; dört test modülü
 ve HTTP helper; `scripts/check_gemini.py`, `phase5_wheel_probe.py`, `check_wheel.py`,
 MANIFEST/CI, örnekler, README/ROADMAP ve bu rapor.
+Portable workspace doğrulaması için mevcut `environments/adapters.py` küçük bir
+güvenlik düzeltmesi aldı. Toplam 46 dosya değişti; yeni repo kopyası oluşturulmadı.
 
 Kalan sınırlar: shared-hostile multi-tenancy yok; custom provider adapter güvenilen
 host kodudur; semantic RAG, genel coding framework runner, HTTP/container session,
