@@ -104,3 +104,20 @@ def test_changed_observed_output_cannot_keep_a_passing_finding():
     assert effective_pass(result)
     result.worker_output='wrong'
     assert not effective_pass(result),'A contradictory recorded output must invalidate the evaluation evidence'
+
+
+@pytest.mark.parametrize('name',['CON','NUL.txt','folder/AUX','COM1','LPT\u00b9.log','name.','name ','a?b'])
+def test_workspace_paths_reject_devices_and_windows_aliases_before_file_io(name):
+    from agentguard.environments.adapters import safe_relative
+    with pytest.raises(PermissionError):safe_relative(name)
+
+
+@pytest.mark.parametrize('files',[
+    {'main.py':"print('ready')",'MAIN.py':"print('wrong')"},
+    {'main.py':"print('ready')",'Folder/a.py':'a','folder/b.py':'b'},
+])
+def test_coding_snapshot_case_aliases_are_rejected_before_build_or_host_writes(monkeypatch,files):
+    from agentguard.evaluation import coding
+    from agentguard.evaluation.registry import MissingEvidence
+    monkeypatch.setattr(coding,'command',lambda *args,**kwargs:pytest.fail('Unsafe snapshot reached Docker/build'))
+    with pytest.raises(MissingEvidence):coding.run_tests({'entrypoint':'main.py','cases':[{'arguments':[],'expected_stdout':'ready'}],'timeout_seconds':10},files)

@@ -3,6 +3,7 @@ from copy import deepcopy
 from dataclasses import dataclass,field,replace
 import hashlib
 import json
+import re
 from pathlib import Path
 import shutil
 import stat
@@ -31,6 +32,12 @@ def safe_relative(name):
         raise PermissionError('Unsafe workspace resource')
     parts=name.split('/')
     if any(not part or part in {'.','..'} or part.startswith('.') for part in parts): raise PermissionError('Unsafe workspace path')
+    # Portable resources must never resolve to a Win32 device or a normalized alias,
+    # including when a Linux-created snapshot is later materialized on Windows.
+    for part in parts:
+        stem=part.split('.')[0].rstrip(' ').upper()
+        if part.endswith((' ','.')) or any(ord(c)<32 or c in '<>"|?*' for c in part) or stem in {'CON','PRN','AUX','NUL','CONIN$','CONOUT$'} or re.fullmatch(r'(?:COM|LPT)[1-9\u00b9\u00b2\u00b3]',stem):
+            raise PermissionError('Non-portable/device workspace resource')
     return Path(*parts)
 
 @dataclass

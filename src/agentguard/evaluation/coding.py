@@ -19,9 +19,14 @@ from agentguard.evaluation.registry import MissingEvidence
 
 def run_tests(config,files,cancel_event=None,run_deadline=None):
     if not isinstance(files,dict) or not files or len(files)>128 or sum(len(v.encode()) for v in files.values() if isinstance(v,str))>1024*1024:raise MissingEvidence('Bounded independent filesystem fixture is required')
+    prefixes={}
     for name,content in files.items():
         safe_relative(name)
         if not isinstance(content,str):raise MissingEvidence('Coding input must contain regular UTF-8 files')
+        parts=name.split('/')
+        for count in range(1,len(parts)+1):
+            prefix='/'.join(parts[:count]);previous=prefixes.setdefault(prefix.casefold(),prefix)
+            if previous!=prefix:raise MissingEvidence('Case-aliased coding paths cannot identify an immutable portable snapshot')
     entry=config['entrypoint'];safe_relative(entry)
     if entry not in files or not entry.endswith('.py'):raise MissingEvidence('Coding entrypoint is absent or unsupported')
     deadline=time.monotonic()+config['timeout_seconds'];runtime=DockerRuntime()
