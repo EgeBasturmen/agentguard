@@ -12,16 +12,11 @@ from agentguard.integrations.tools import ToolContract,RoutedTool,ReplayEntry,Op
 from agentguard.integrations.sdk import IntegrationRunner,environment_tools,preflight
 from agentguard.environments import MemoryEnvironment,FilesystemEnvironment,DocumentEnvironment,HTTPEnvironment
 from agentguard.security.policy import SecurityPolicy
+from agentguard.model_gateway.gateway import GatewayConfig
+from agentguard.integrations.plan_config import EndpointConfig
 
 class Model(BaseModel):
     model_config=ConfigDict(extra='forbid',strict=True)
-class EndpointConfig(Model):
-    base_url: str
-    allow_http: bool=False
-    private_hosts: list[str]=Field(default_factory=list)
-    timeout_seconds: float=10.0
-    max_bytes: int=1024*1024
-    def endpoint(self): return Endpoint(self.base_url,self.allow_http,frozenset(self.private_hosts),self.timeout_seconds,self.max_bytes)
 class AgentConfig(Model):
     transport: Literal['python','http','container']
     reference: str|None=None
@@ -52,6 +47,7 @@ class IntegrationPlan(Model):
     tools: list[ToolConfig]=Field(default_factory=list)
     policy: dict=Field(default_factory=dict)
     required_capabilities: list[str]=Field(default_factory=list)
+    model: GatewayConfig|None=None
 
 
 def run_plan(path,*,cancel_event=None,preflight_only=False):
@@ -109,6 +105,6 @@ def run_integration_plan(plan,*,base_dir, cancel_event=None,preflight_only=False
         for contract in expected_contracts:
             if canonical_json(actual.get(contract['name']))!=canonical_json(contract):raise ValueError('Pinned generation contract changed or is absent: '+contract['name'])
     if preflight_only:
-        return preflight(plan.scenario,agent,environment,tools,SecurityPolicy.model_validate(plan.policy),plan.required_capabilities)
+        return preflight(plan.scenario,agent,environment,tools,SecurityPolicy.model_validate(plan.policy),plan.required_capabilities,plan.model)
     return IntegrationRunner().run(plan.scenario,agent,environment,tools,policy=SecurityPolicy.model_validate(plan.policy),
-        required_capabilities=plan.required_capabilities,cancel_event=cancel_event)
+        required_capabilities=plan.required_capabilities,cancel_event=cancel_event,model_config=plan.model)

@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "scenario": {
+    "name": "conversation-json",
+    "task": "Return ready as JSON",
+    "initial_state": {},
+    "turns": [
+      {"task": "Return only JSON with a status field equal to ready."},
+      {"task": "Return the same JSON status again, without markdown."}
+    ],
+    "evaluations": [
+      {"id": "format", "kind": "output_json", "config": {"json_schema": {"type": "object", "properties": {"status": {"const": "ready"}}, "required": ["status"], "additionalProperties": false}}}
+    ]
+  },
+  "agent": {"transport": "python", "reference": "phase5_agent:AssistantAgent", "source_dir": "."},
+  "environment": {"kind": "memory"},
+  "policy": {"allowed_tools": ["model.generate"], "timeout_seconds": 90, "tool_timeout_seconds": 30},
+  "model": {
+    "provider": "gemini", "model": "gemini-3.5-flash-lite", "mode": "live",
+    "credential_env": "GEMINI_API_KEY", "response_format": "json", "prompt_version": "example-v1",
+    "max_calls": 2, "max_input_chars": 1536, "max_output_tokens": 256,
+    "max_total_tokens": 5000, "max_cost_micro_usd": 10000,
+    "timeout_seconds": 30.0
+  }
+}

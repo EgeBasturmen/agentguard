@@ -15,6 +15,7 @@ from agentguard.execution.tool_registry import ToolRegistry
 from agentguard.orchestration.controller import RunController
 from agentguard.runner.runner import ScenarioRunner
 from agentguard.security.policy import SecurityPolicy
+from agentguard.evaluation.specs import requires_business_evidence
 
 @dataclass
 class PreflightResult:
@@ -24,14 +25,24 @@ class PreflightResult:
     def supported(self): return not self.issues
 
 
-def preflight(scenario,agent,environment,tools,policy,required_capabilities=()):
+def preflight(scenario,agent,environment,tools,policy,required_capabilities=(),model_config=None):
     result=PreflightResult()
     if not isinstance(agent,(PythonAgent,ContainerAgent,HTTPAgent)):
         result.issues.append('Unsupported agent adapter/protocol');return result
     available=agent.capabilities()
+    if isinstance(agent,PythonAgent):available.supports_sessions=True;available.supports_memory_reset=True
+    if model_config is not None and not isinstance(agent,HTTPAgent):available.supports_model_usage=True
     for name in required_capabilities:
         if not hasattr(available,name) or not getattr(available,name): result.issues.append('Missing capability: '+name)
     names=[tool.contract.name for tool in tools]
+    if model_config is not None:names.append('model.generate')
+    if any(tool.contract.name=='model.generate' for tool in tools):result.issues.append('Reserved gateway tool cannot be supplied by a connector')
+    if any(check.kind=='judge' for check in scenario.evaluations) and model_config is None:result.issues.append('Judge requires a configured model gateway')
+    if any(f.tool_name not in names or f.tool_name not in policy.allowed_tools or f.tool_name=='model.generate' for f in scenario.faults):result.issues.append('Faults require a permitted discovered non-model tool')
+    if scenario.turns and not isinstance(agent,PythonAgent):result.issues.append('Multi-turn sessions require the built-in controlled Python worker')
+    if isinstance(agent,HTTPAgent) and (scenario.faults or model_config is not None or any(check.kind in {'tool_arguments','tool_sequence','temporal_never','temporal_before','rag_sources','rag_grounded','coding_tests','fault_recovery'} for check in scenario.evaluations)):
+        result.issues.append('HTTP endpoint cannot verify controller tool/model/fault evidence')
+    if model_config is not None and model_config.mode=='mock' and requires_business_evidence(scenario):result.issues.append('Mock model cannot establish live business-state correctness')
     if len(names)!=len(set(names)): result.issues.append('Duplicate tool identities')
     if not set(policy.allowed_tools).issubset(names): result.issues.append('Policy references undiscovered tools')
     if any(check.tool_name not in names for check in scenario.tool_expectations): result.issues.append('Expected tool was not discovered')
@@ -51,7 +62,7 @@ def preflight(scenario,agent,environment,tools,policy,required_capabilities=()):
         except Exception as exc: result.issues.append('Invalid tool contract: '+str(exc));continue
         if tool.mode=='mock':
             result.coverage_gaps.append('Schema mock '+tool.contract.name+': interface evidence only; business semantics are not verified.')
-            if scenario.expected_state or scenario.forbidden_changes or scenario.invariants:
+            if requires_business_evidence(scenario):
                 result.issues.append('Schema mock cannot verify business state/effect checks')
         if tool.mode=='replay':
             result.coverage_gaps.append('Replay '+tool.contract.name+': approved recorded cases only; no live-system claim or fallback.')
@@ -72,11 +83,11 @@ def preflight(scenario,agent,environment,tools,policy,required_capabilities=()):
 
 
 class IntegrationRunner:
-    def run(self,scenario,agent,environment,tools=(),*,policy=None,required_capabilities=(),cancel_event=None):
+    def run(self,scenario,agent,environment,tools=(),*,policy=None,required_capabilities=(),cancel_event=None,model_config=None):
         scenario=Scenario.model_validate(scenario.model_dump())
         policy=SecurityPolicy.model_validate((policy or SecurityPolicy()).model_dump())
         tools=deepcopy(list(tools))
-        readiness=preflight(scenario,agent,environment,tools,policy,required_capabilities)
+        readiness=preflight(scenario,agent,environment,tools,policy,required_capabilities,model_config)
         if not readiness.supported:
             return RunResult(scenario_name=scenario.name,passed=False,status='error',error_stage='validation',
                 error_type='IntegrationPreflightError',error_message='; '.join(readiness.issues),integration_status='unsupported',
@@ -111,10 +122,12 @@ class IntegrationRunner:
                 raise ExecutionTimeout('Integration provisioning exceeded run deadline')
 
             if isinstance(agent,(PythonAgent,ContainerAgent)):
+                from agentguard.model_gateway.gateway import ModelGateway
+                gateway=ModelGateway(model_config,cancel_event=cancel_event) if model_config is not None else None
                 registry=ToolRegistry()
                 for tool in bound: tool.register(registry)
                 result=RunController().run(scenario,agent.launch,environment='integration',registry=registry,policy=policy,
-                    cancel_event=cancel_event,state_observer=environment.snapshot if environment.external else None,environment_identity=fingerprint,execution_deadline=deadline)
+                    cancel_event=cancel_event,state_observer=environment.snapshot if environment.external else None,environment_identity=fingerprint,execution_deadline=deadline,model_gateway=gateway)
             else:
                 agent=replace(agent,endpoint=replace(agent.endpoint,timeout_seconds=min(agent.endpoint.timeout_seconds,remaining)))
                 output={}
@@ -123,7 +136,9 @@ class IntegrationRunner:
                     def __init__(self,initial_state,tracer): pass
                     def get_state(self): return environment.snapshot()
                 class Invoke:
-                    def run(self,task,sandbox): output['value']=agent.invoke(task,run_id,environment.namespace,cancel_event)
+                    def run(self,task,sandbox):
+                        output['value']=agent.invoke(task,run_id,environment.namespace,cancel_event)
+                        return output['value']
                 result=ScenarioRunner(View,environment_id='integration:'+fingerprint).run(scenario,Invoke())
                 result.worker_output=output.get('value')
                 result.execution_context=ExecutionContext(execution_mode='observed',adapter=AdapterIdentity(id='http.endpoint',version='1.0.0'),

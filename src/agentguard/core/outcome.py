@@ -9,6 +9,49 @@ from agentguard.contracts.compatibility import supported_matrix
 def evidence_errors(result: RunResult) -> list[str]:
     """Shared evidence integrity checks for run and comparison decisions."""
     problems = []
+    if (any(event.tool_name=='model.generate' for event in result.audit) or result.execution_context is not None and result.execution_context.capabilities.supports_model_usage) and result.model_evidence is None:
+        problems.append('Measured model usage evidence is missing.')
+    if result.model_evidence is not None:
+        try:
+            from agentguard.model_gateway.gateway import GatewayEvidence
+            if not result.model_evidence.get('fingerprint'):raise ValueError('Missing model usage fingerprint')
+            model=GatewayEvidence.model_validate(result.model_evidence)
+            if model.status!='passed':raise ValueError('Model usage is not settled within budget')
+            if model.mode=='mock' and result.comparison_manifest is not None:
+                from agentguard.evaluation.specs import requires_business_evidence
+                if requires_business_evidence(result.comparison_manifest.scenario):raise ValueError('Mock model cannot verify business checks')
+            judge_specs=[spec for spec in result.comparison_manifest.scenario.evaluations if spec.kind=='judge'] if result.comparison_manifest is not None else []
+            if judge_specs and (model.mode!='live' or len([row for row in model.calls if row.purpose=='judge' and row.status=='completed'])!=sum(len(spec.config['labels'])+1 for spec in judge_specs)):raise ValueError('Judge calibration/call evidence is incomplete')
+            if result.execution_context is not None and result.execution_context.execution_mode=='controlled':
+                if len([row for row in model.calls if row.purpose=='agent'])!=len([event for event in result.audit if event.tool_name=='model.generate' and event.status!='denied']):raise ValueError('Model calls do not match controller audit')
+                from agentguard.core.manifest import digest
+                calls=[row for row in model.calls if row.purpose=='agent']
+                events=[event for event in result.audit if event.tool_name=='model.generate' and event.status!='denied']
+                for call,event in zip(calls,events):
+                    prompt=dict(messages=event.arguments['messages'],system=model.config.system_prompt,version=model.config.prompt_version)
+                    if call.prompt_digest!=digest(prompt):raise ValueError('Model request/usage binding mismatch')
+        except (ValueError,TypeError,KeyError):problems.append('Model usage/budget evidence is unverified or inconsistent.')
+    manifest_for_checks=result.comparison_manifest
+    if manifest_for_checks is not None:
+        try:
+            from agentguard.evaluation.registry import EvaluationFinding
+            from agentguard.core.manifest import digest,check_id
+            specs=manifest_for_checks.scenario.evaluations
+            if specs:
+                from agentguard.core.paths import values_equal
+                from agentguard.evaluation.diff import diff_states
+                evidence=result.evaluation_evidence
+                if set(evidence)!={'before','after','output','audit','turn_outputs'} or not values_equal(evidence['before'],manifest_for_checks.scenario.initial_state) or not values_equal(evidence['output'],result.worker_output) or not values_equal(evidence['audit'],[event.model_dump(mode='json') for event in result.audit]) or not values_equal(evidence['turn_outputs'],result.turn_outputs):raise ValueError('Recorded observations differ from evaluated evidence')
+                if not values_equal([m.model_dump(mode='json') for m in diff_states(evidence['before'],evidence['after'])],[m.model_dump(mode='json') for m in result.mutations]):raise ValueError('Snapshot/mutation evidence differs')
+            if {f.id for f in result.evaluations}!={s.id for s in specs} or len(result.evaluations)!=len(specs):raise ValueError('Evaluation coverage mismatch')
+            assertions={a.assertion_id:a for a in result.assertions}
+            for spec in specs:
+                finding=next(f for f in result.evaluations if f.id==spec.id)
+                EvaluationFinding.model_validate(finding.model_dump())
+                assertion=assertions.get(check_id('evaluation',spec.id))
+                if finding.spec_digest!=digest(spec.model_dump(mode='json')) or finding.evidence_digest!=digest(result.evaluation_evidence) or finding.kind!=spec.kind or finding.status!='pass' or assertion is None or not assertion.passed:raise ValueError('Evaluator missing, failed or inconclusive')
+            if len(result.turn_outputs)!=len(manifest_for_checks.scenario.turns):raise ValueError('Declared session was not fully observed')
+        except (ValueError,TypeError,KeyError):problems.append('Evaluator/session evidence is incomplete or inconsistent.')
     if result.generation_ref is not None or result.admission_status != "external":
         try:
             from agentguard.generation.evidence import ApprovalEvidence
@@ -43,7 +86,8 @@ def evidence_errors(result: RunResult) -> list[str]:
                 problems.append("Integration and comparison manifests are not bound.")
             if 'mock' in evidence.modes and comparison is not None:
                 scenario = comparison.scenario
-                if scenario.expected_state or scenario.forbidden_changes or scenario.invariants:
+                from agentguard.evaluation.specs import requires_business_evidence
+                if requires_business_evidence(scenario):
                     problems.append("Schema mock cannot establish business state/effect evidence.")
         except (ValueError, TypeError, KeyError):
             problems.append("Integration manifest is invalid or was modified.")
@@ -62,7 +106,7 @@ def evidence_errors(result: RunResult) -> list[str]:
         if result.policy_status != "passed": problems.append("Controlled tool policy did not pass.")
         if manifest is None or not manifest.started or not manifest.completed or not all((manifest.image_id, manifest.source_digest, manifest.base_digest, manifest.worker_digest, manifest.container_id)):
             problems.append("Controlled runtime evidence is incomplete.")
-        if any(event.status != "completed" for event in result.audit):
+        if any(event.status != "completed" and not _verified_injected_recovery(result,event) for event in result.audit):
             problems.append("Controlled audit contains denied or failed calls.")
     names = [item.name for item in result.assertions]
     ids = [item.assertion_id for item in result.assertions if item.assertion_id is not None]
@@ -86,6 +130,17 @@ def evidence_errors(result: RunResult) -> list[str]:
         except ValueError:
             problems.append("Comparison manifest is invalid or was modified.")
     return problems
+
+def _verified_injected_recovery(result,event):
+    """Only explicit no-effect injected faults with a passing recovery check are exempt."""
+    scenario=result.comparison_manifest.scenario if result.comparison_manifest is not None else None
+    if scenario is None or event.status!='error' or event.effect_status!='none':return False
+    fault=next((fault for fault in scenario.faults if fault.id==event.fault_id and fault.tool_name==event.tool_name and event.reason=='INJECTED_'+fault.kind.upper()),None)
+    if fault is None:return False
+    prior=[e for e in result.audit if e.sequence<=event.sequence and e.tool_name==event.tool_name]
+    if len(prior)!=fault.call_index:return False
+    checks={check.id for check in scenario.evaluations if check.kind=='fault_recovery' and check.config['fault_id']==fault.id}
+    return any(f.id in checks and f.status=='pass' for f in result.evaluations) and any(e.sequence>event.sequence and e.tool_name==event.tool_name and e.status=='completed' for e in result.audit)
 
 
 def effective_pass(result: RunResult) -> bool:

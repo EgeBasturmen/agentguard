@@ -7,6 +7,7 @@ from agentguard.core.trace import TraceEvent
 from agentguard.core.manifest import ComparisonManifest
 from agentguard.contracts.models import ExecutionContext
 from agentguard.execution.records import AuditEvent, RuntimeManifest
+from agentguard.evaluation.registry import EvaluationFinding
 
 
 
@@ -30,6 +31,10 @@ class RunResult(BaseModel):
     generation_ref: dict | None = None
     admission_status: Literal["external", "unapproved", "approved", "stale"] = "external"
     approval_evidence: dict | None = None
+    evaluations: list[EvaluationFinding] = Field(default_factory=list)
+    evaluation_evidence: dict = Field(default_factory=dict)
+    model_evidence: dict | None = None
+    turn_outputs: list[str|None] = Field(default_factory=list)
     integration_status: Literal["not_applicable", "verified", "unverified", "unsupported"] = "not_applicable"
     coverage_gaps: list[str] = Field(default_factory=list)
     integration_manifest: dict = Field(default_factory=dict)

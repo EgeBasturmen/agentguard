@@ -11,6 +11,8 @@ class AuditEvent(BaseModel):
     status: Literal["completed", "denied", "error"]
     reason: str | None = None
     mutations: list[StateMutation] = Field(default_factory=list)
+    fault_id: str|None=None
+    effect_status: Literal['none','observed','unknown']='none'
 
 
 class RuntimeManifest(BaseModel):

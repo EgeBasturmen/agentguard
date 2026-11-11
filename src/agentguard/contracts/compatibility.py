@@ -102,6 +102,10 @@ def supported_matrix() -> list[AdapterSupport]:
         result.append(AdapterSupport(adapter=AdapterIdentity(id=name,version="1.0.0"),component="environment",implementation="implemented",
             execution_modes=["observed","controlled"],capabilities=Capabilities(supports_state_snapshot=True,supports_reset=True),
             environment_kinds=[kind],tool_modes=["staging"] if kind=="http" else ["simulator"],supported_protocols=["1"]))
+    for row in result:
+        if row.adapter.id=='python.container':row.capabilities.supports_sessions=True;row.capabilities.supports_memory_reset=True
+        if row.adapter.id in {'python.container','container.ipc'}:row.capabilities.supports_model_usage=True
+        if row.adapter.id=='python.local':row.capabilities.supports_output=True
     return result
 
 

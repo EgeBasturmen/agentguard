@@ -29,8 +29,10 @@ class ScenarioRunner:
     def __init__(
         self, sandbox_factory: SandboxFactory = CommerceSandbox, *,
         environment_id: str | None = None,
+        evidence_provider=None,
     ) -> None:
         self.sandbox_factory = sandbox_factory
+        self.evidence_provider = evidence_provider
         factory_type = type(sandbox_factory)
         self.environment_id = environment_id or (
             f"{getattr(sandbox_factory, '__module__', factory_type.__module__)}:"
@@ -62,6 +64,7 @@ class ScenarioRunner:
         try:
             # Revalidate model instances too: callers may have mutated a spec.
             scenario = Scenario.model_validate(scenario.model_dump())
+            if scenario.turns and self.evidence_provider is None:raise ValueError('Multi-turn lifecycle requires the controlled Python worker')
             result.comparison_manifest = ComparisonManifest(
                 scenario=scenario,
                 environment=self.environment_id,
@@ -83,6 +86,7 @@ class ScenarioRunner:
             if inspect.iscoroutinefunction(agent.run) or inspect.isasyncgenfunction(agent.run):
                 raise UnsupportedAsyncAgentError("ScenarioRunner requires a synchronous run method.")
             output = agent.run(task=scenario.task, sandbox=sandbox)
+            if output is not None and isinstance(output,str):result.worker_output=output
             if inspect.isawaitable(output) or inspect.isasyncgen(output):
                 if inspect.iscoroutine(output):
                     output.close()
@@ -131,6 +135,19 @@ class ScenarioRunner:
                     name=name, assertion_id=assertion_id, passed=False,
                     message=f"Evaluation error ({type(exc).__name__}): {exc}",
                 ))
+
+        from agentguard.evaluation.registry import evaluate,evidence_payload
+        context=dict(before=before.state,after=after.state,output=result.worker_output,authoritative=False)
+        if self.evidence_provider is not None:context.update(self.evidence_provider(sandbox))
+        if scenario.evaluations:result.evaluation_evidence=evidence_payload(context)
+        result.turn_outputs=context.get('turn_outputs',[])
+        if scenario.evaluations and result.execution_context is not None and result.worker_output is not None:result.execution_context.capabilities.supports_output=True
+        for spec in scenario.evaluations:
+            finding=evaluate(spec,context);result.evaluations.append(finding)
+            result.assertions.append(AssertionResult(name='evaluation:'+spec.id,assertion_id=check_id('evaluation',spec.id),passed=finding.status=='pass',message=finding.status+': '+str(finding.details)))
+            if finding.status=='error':
+                result.evaluation_status='error';result.evaluation_error_type='EvaluatorError';result.evaluation_error_message='Evaluation evidence or execution failed'
+                record_error(RuntimeError('Evaluation evidence or execution failed'),'evaluation')
 
         if agent_error is not None:
             result.assertions.append(AssertionResult(

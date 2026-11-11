@@ -1,6 +1,7 @@
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator, model_serializer
+from agentguard.evaluation.specs import EvaluationSpec,Turn,Fault
 
 from agentguard.core.paths import PathResolutionError, parse_path, resolve_path, values_equal
 
@@ -77,19 +78,35 @@ class Scenario(NamedSpec):
     forbidden_changes: list[ForbiddenChange] = Field(default_factory=list)
     tool_expectations: list[ToolExpectation] = Field(default_factory=list)
     invariants: list[Invariant] = Field(default_factory=list)
+    evaluations: list[EvaluationSpec] = Field(default_factory=list,max_length=100)
+    turns: list[Turn] = Field(default_factory=list,max_length=20)
+    faults: list[Fault] = Field(default_factory=list,max_length=100)
+
+    @model_serializer(mode='wrap')
+    def compatible_dump(self,handler):
+        data=handler(self)
+        for key in ('evaluations','turns','faults'):
+            if not getattr(self,key):data.pop(key,None)
+        return data
 
     @model_validator(mode="after")
     def validate_checks(self) -> "Scenario":
-        if not any((self.expected_state, self.forbidden_changes, self.tool_expectations, self.invariants)):
+        if not any((self.expected_state, self.forbidden_changes, self.tool_expectations, self.invariants,self.evaluations)):
             raise ValueError("Scenario requires at least one evaluation check.")
         groups = (
             [parse_path(check.path) for check in self.expected_state],
             [parse_path(check.path) for check in self.forbidden_changes],
             [check.tool_name for check in self.tool_expectations],
             [check.name for check in self.invariants],
+            [check.id for check in self.evaluations],
+            [check.id for check in self.faults],
         )
         if any(len(group) != len(set(group)) for group in groups):
             raise ValueError("Duplicate evaluation checks are not allowed.")
+        if len({(f.tool_name,f.call_index) for f in self.faults})!=len(self.faults):raise ValueError('Overlapping injected faults')
+        recovery={check.config['fault_id'] for check in self.evaluations if check.kind=='fault_recovery'}
+        if recovery!={fault.id for fault in self.faults}:raise ValueError('Every declared fault requires an explicit recovery evaluator')
+        if sum(len(turn.task.encode()) for turn in self.turns)>8192:raise ValueError('Session input budget exceeded')
         for index, parent in enumerate(self.expected_state):
             parent_parts = parse_path(parent.path)
             for child in self.expected_state[index + 1:]:

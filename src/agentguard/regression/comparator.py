@@ -24,6 +24,13 @@ class RegressionComparator:
         integrity = self._validate_run(baseline, "baseline") + self._validate_run(candidate, "candidate")
         findings.extend(integrity)
         comparison_status = "verified"
+        if baseline.model_evidence and candidate.model_evidence:
+            old=baseline.model_evidence.get('config',{});new=candidate.model_evidence.get('config',{})
+            if old.get('mode')!=new.get('mode'):
+                finding=RegressionFinding(finding_type='model_mode_changed',key='model:mode',severity='critical',message='Mock/live model evidence is not interchangeable',baseline=old.get('mode'),candidate=new.get('mode'))
+                integrity.append(finding);findings.append(finding)
+            elif any(old.get(key)!=new.get(key) for key in ('provider','model','prompt_version','system_prompt')):
+                findings.append(RegressionFinding(finding_type='model_configuration_changed',key='model:config',severity='info',message='Pinned model/provider/prompt configuration changed; checks remain independently defined',baseline={key:old.get(key) for key in ('provider','model','prompt_version')},candidate={key:new.get(key) for key in ('provider','model','prompt_version')}))
         if baseline.scenario_name != candidate.scenario_name:
             comparison_status = "incompatible"
         elif baseline.comparison_manifest is None or candidate.comparison_manifest is None:

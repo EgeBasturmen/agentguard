@@ -225,3 +225,16 @@ Trace sonucu otomatik doğru cevap değildir; bilinmeyen beklenti INCONCLUSIVE k
 CSV/JSON/YAML import-export, immutable revision, stale/retire, gerçek execution
 kanıtına bağlı benign/adversarial/edge coverage ve zorunlu coverage gate desteklenir.
 [CLI akışı, API sınırları ve doğrulama kaydı](docs/phase4-verification.md).
+
+## Phase 5 model ve evaluation
+
+Provider bağımsız controller gateway; Gemini text API, açık JSON HTTP bridge ve
+etiketli offline mock destekler. Output/tool/state/temporal, extractive RAG,
+dosya/izole Python CLI, multi-turn ve kalibre edilen opsiyonel judge kontrolleri
+mevcut controller ve release gate'i kullanır. Eksik usage, budget aşımı, evaluator
+hatası ve belirsizlik PASS değildir; judge safety/policy FAIL'ini geçersiz kılamaz.
+
+`agentguard integration examples/phase5_plan.json --preflight-only` ücretli çağrı yapmaz.
+`python scripts/check_gemini.py` canlı test planını sıfır API çağrısıyla gösterir.
+Canlı kullanım yalnızca açık onayla ve `GEMINI_API_KEY` üzerinden yapılır.
+[Destek profilleri, kurulum, doğrulama ve sınırlar](docs/phase5-verification.md).

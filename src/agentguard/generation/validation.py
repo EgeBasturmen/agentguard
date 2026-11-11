@@ -35,6 +35,8 @@ def validate_candidate(candidate):
     try:
         if raw.get('generation') is not None:raise ValueError('Stored drafts cannot contain release admission claims')
         scenario=Scenario.model_validate(raw)
+        from agentguard.evaluation.specs import requires_business_evidence
+        if candidate.runtime.model is not None and candidate.runtime.model.mode=='mock' and requires_business_evidence(scenario):raise ValueError('Mock model cannot verify business checks')
         checks=definitions(raw)
         if set(checks)!=set(candidate.oracle_sources):raise ValueError('Every check needs independent oracle provenance')
         sources={s.id:s for s in candidate.sources}
@@ -59,10 +61,17 @@ def validate_candidate(candidate):
                 if '/' in name or not isinstance(doc,dict) or not isinstance(doc.get('content'),str):raise ValueError('Invalid document fixture')
         agent=candidate.runtime.agent.transport
         capabilities=Capabilities(supports_output=True,supports_state_snapshot=True) if agent=='http' else controlled_capabilities()
+        if agent=='python':capabilities.supports_sessions=True;capabilities.supports_memory_reset=True
+        if candidate.runtime.model is not None:
+            if agent=='http':raise ValueError('Remote HTTP model usage cannot be intercepted')
+            capabilities.supports_model_usage=True
         for name in candidate.runtime.required_capabilities:
             if not getattr(capabilities,name,False):raise ValueError('Missing capability: '+name)
         if agent=='http' and (kind!='http' or scenario.tool_expectations):raise ValueError('Observed HTTP agent cannot verify tool expectations or non-HTTP state')
         names=set()
+        if candidate.runtime.model is not None:names.add('model.generate')
+        if scenario.turns and agent!='python':raise ValueError('Session lifecycle requires the Python worker')
+        if agent=='http' and (scenario.faults or any(check.kind in {'tool_arguments','tool_sequence','temporal_never','temporal_before','rag_sources','rag_grounded','coding_tests','fault_recovery'} for check in scenario.evaluations)):raise ValueError('Evaluator requires controlled evidence')
         for source in candidate.sources:
             if source.kind=='contract':
                 contract=source.content['contract'];names.add(contract['name'])
@@ -70,7 +79,7 @@ def validate_candidate(candidate):
         if kind=='dataset':names.update({'document.get','document.search'})
         for config in candidate.runtime.tools:
             if config.contract:names.add(config.contract['name'])
-            if config.connector=='mock' and (scenario.expected_state or scenario.forbidden_changes or scenario.invariants):
+            if config.connector=='mock' and requires_business_evidence(scenario):
                 raise ValueError('Mock cannot verify business-state oracle')
         allowed=set(candidate.runtime.policy['allowed_tools'])
         if not allowed.issubset(names):raise ValueError('Policy references an undiscovered tool contract')

@@ -61,6 +61,8 @@ class ComparisonManifest(BaseModel):
                 else:
                     selector = item.tool_name if kind == "tool" else item.name
                 checks[check_id(kind, selector)] = {"kind": kind, **definition}
+        for item in self.scenario.evaluations:
+            checks[check_id('evaluation',item.id)]={'kind':'evaluation',**item.model_dump()}
         return checks
 
     @model_validator(mode="after")
@@ -74,6 +76,8 @@ class ComparisonManifest(BaseModel):
             "environment": self.environment,
             "evaluator_version": self.evaluator_version,
         }
+        if self.scenario.turns:payload['turns']=[turn.model_dump() for turn in self.scenario.turns]
+        if self.scenario.faults:payload['faults']=[fault.model_dump() for fault in self.scenario.faults]
         expected = digest(payload)
         if self.fingerprint is not None and self.fingerprint != expected:
             raise ValueError("Comparison manifest fingerprint does not match its content.")

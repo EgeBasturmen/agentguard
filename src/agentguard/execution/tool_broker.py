@@ -97,6 +97,7 @@ class ToolBroker:
         forbidden_changes=None,
         tracer: TraceCollector | None = None,
         cancel_event=None,
+        model_gateway=None,faults=(),
     ) -> None:
         if type(max_tool_calls) is not int or max_tool_calls < 1:
             raise ValueError(
@@ -118,6 +119,9 @@ class ToolBroker:
         self._forbidden = forbidden_changes or []
         self._tracer = tracer or TraceCollector()
         self._cancel = cancel_event
+        self.model_gateway=model_gateway
+        self._faults=list(faults)
+        self._tool_attempts={}
         self.remaining_seconds: float | None = None
 
         self._registry = (
@@ -177,6 +181,8 @@ class ToolBroker:
         reason = None
         mutations = []
         status = "denied"
+        fault_id=None
+        effect_status='none'
         try:
             tool = self._registry.get(name)
             if self._call_count > self._policy.max_tool_calls:
@@ -197,15 +203,25 @@ class ToolBroker:
             if not tool.stateful:
                 raise RuntimeError("Controlled tools require a transactional state handler.")
             self._tracer.emit("tool_started", tool_name=name, payload={"arguments": deepcopy(validated)})
+            self._tool_attempts[name]=self._tool_attempts.get(name,0)+1
+            planned=next((fault for fault in self._faults if fault.tool_name==name and fault.call_index==self._tool_attempts[name]),None)
+            if planned is not None:
+                from agentguard.execution.faults import InjectedToolFailure
+                fault_id=planned.id;reason='INJECTED_'+planned.kind.upper();status='error'
+                raise InjectedToolFailure(reason)
             limit = self._policy.tool_timeout_seconds
             if self.remaining_seconds is not None:
                 limit = min(limit, self.remaining_seconds)
-            result, proposed = invoke_transaction(tool.handler, self._state, validated, limit, self._cancel)
+            if name=='model.generate' and self.model_gateway is not None:
+                result=self.model_gateway.generate(**validated,remaining_seconds=limit);proposed=deepcopy(self._state)
+            else:
+                result, proposed = invoke_transaction(tool.handler, self._state, validated, limit, self._cancel)
             mutations = diff_states(self._state, proposed)
             if any(not evaluate_forbidden_change(mutations, check).passed for check in self._forbidden):
                 reason = "FORBIDDEN_EFFECT"
                 raise ToolNotAllowedError(reason)
             self._state = proposed
+            effect_status='observed' if mutations else 'none'
             status = "completed"
             self._tracer.emit("tool_completed", tool_name=name, payload={"result": deepcopy(result)})
             return deepcopy(result)
@@ -214,10 +230,13 @@ class ToolBroker:
             self._tracer.emit("error", tool_name=name, payload={"policy_violation": reason})
             raise
         except Exception as exc:
+            from agentguard.execution.faults import InjectedToolFailure
+            if isinstance(exc,InjectedToolFailure):raise
             status = "error"
+            effect_status='unknown'
             reason = type(exc).__name__
             self.runtime_error = exc
             raise
         finally:
             self.audit.append(AuditEvent(sequence=self._call_count, tool_name=name,
-                arguments=deepcopy(arguments), status=status, reason=reason, mutations=mutations))
+                arguments=deepcopy(arguments), status=status, reason=reason, mutations=mutations,fault_id=fault_id,effect_status=effect_status))

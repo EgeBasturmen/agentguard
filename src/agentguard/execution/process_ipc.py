@@ -38,6 +38,7 @@ class ProcessIPC:
         max_messages: int = 100,
         max_stderr_bytes: int = 64 * 1024,
         run_manifest=None, cancel_event=None, max_stdout_bytes=1024 * 1024,
+        expected_turns=0,
     ) -> None:
         if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be finite and positive.")
@@ -55,6 +56,8 @@ class ProcessIPC:
         self._cancel = cancel_event
         self._max_stdout_bytes = max_stdout_bytes
         self.completion = None
+        self.expected_turns=expected_turns
+        self.turn_outputs=[]
         self._stop = threading.Event()
         self._process = process
         self._dispatcher = dispatcher
@@ -248,7 +251,7 @@ class ProcessIPC:
                 )
 
             if self._manifest is not None:
-                from agentguard.execution.lifecycle_protocol import Started, Completed
+                from agentguard.execution.lifecycle_protocol import Started, Completed,TurnCompleted
                 from agentguard.execution.ipc_protocol import decode_ipc_message
                 try:
                     header = json.loads(payload)
@@ -261,10 +264,16 @@ class ProcessIPC:
                         continue
                     if not self._manifest.started or self.completion is not None:
                         raise ValueError("Invalid worker lifecycle order")
+                    if kind=='turn_completed':
+                        message=decode_ipc_message(payload,TurnCompleted)
+                        if message.run_id!=self._manifest.run_id or message.turn!=len(self.turn_outputs)+1 or message.turn>self.expected_turns:raise ValueError('Invalid session turn order/identity')
+                        self.turn_outputs.append(message.output)
+                        continue
                     if kind == "completed":
                         message = decode_ipc_message(payload, Completed)
                         if message.run_id != self._manifest.run_id:
                             raise ValueError("Completion belongs to a different run")
+                        if message.status=='ok' and (len(self.turn_outputs)!=self.expected_turns or self.expected_turns and message.output!=self.turn_outputs[-1]):raise ValueError('Session completion lacks declared turn evidence')
                         self.completion = message
                         self._manifest.completed = True
                         continue

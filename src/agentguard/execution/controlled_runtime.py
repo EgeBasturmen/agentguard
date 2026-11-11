@@ -59,6 +59,7 @@ class ControlledDockerRuntime(DockerRuntime):
     def __init__(self):
         self.cleanup_status = "not_required"
         self.output = None
+        self.turn_outputs=[]
 
     def build(self, spec, manifest, deadline, cancel):
         from agentguard.integrations.agents import ContainerLaunchSpec
@@ -115,7 +116,7 @@ class ControlledDockerRuntime(DockerRuntime):
             self.cleanup_status = "unverified"
             raise
 
-    def execute(self, spec, task, broker, policy, manifest, cancel=None, *, execution_deadline=None):
+    def execute(self, spec, task, broker, policy, manifest, cancel=None, *, execution_deadline=None,turns=None):
         now=time.monotonic()
         deadline=now+policy.timeout_seconds
         if execution_deadline is not None:
@@ -137,9 +138,10 @@ class ControlledDockerRuntime(DockerRuntime):
             manifest.container_id = identifier
             process = launch_with_deadline(["docker", "start", "--attach", "--interactive", name], deadline)
             ipc = ProcessIPC(process, IPCDispatcher(broker), timeout_seconds=max(0.001, deadline-time.monotonic()),
-                max_messages=policy.max_tool_calls+3, max_stderr_bytes=policy.max_stderr_bytes,
+                max_messages=policy.max_tool_calls+3+len(turns or []), max_stderr_bytes=policy.max_stderr_bytes,
+                expected_turns=len(turns or []),
                 run_manifest=manifest, cancel_event=cancel, max_stdout_bytes=policy.max_stdout_bytes)
-            ipc._write_with_deadline(encode_ipc_message(StartRequest(run_id=manifest.run_id, reference=spec.reference, task=task)))
+            ipc._write_with_deadline(encode_ipc_message(StartRequest(run_id=manifest.run_id, reference=spec.reference, task=task,turns=turns)))
             ipc.serve()
             self.output = ipc.completion.output
             if broker.runtime_error is not None: raise broker.runtime_error
@@ -167,7 +169,9 @@ class ControlledDockerRuntime(DockerRuntime):
                 except Exception as exc:
                     self.cleanup_status = "unverified"
                     failure = failure or exc
-            if ipc is not None: ipc.close()
+            if ipc is not None:
+                self.turn_outputs=list(ipc.turn_outputs)
+                ipc.close()
             if process is not None:
                 for stream in (process.stdin, process.stdout, process.stderr):
                     try: stream.close()

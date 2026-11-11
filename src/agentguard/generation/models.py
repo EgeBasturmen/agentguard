@@ -1,6 +1,7 @@
 """Sealed proposal content. Hashes detect inconsistency; they are not signatures/authentication."""
 from typing import Literal
-from pydantic import BaseModel,ConfigDict,Field,model_validator,field_validator
+from pydantic import BaseModel,ConfigDict,Field,model_validator,field_validator,model_serializer
+from agentguard.model_gateway.gateway import GatewayConfig
 from agentguard.core.manifest import digest,canonical_json,check_id
 from agentguard.core.paths import parse_path
 from agentguard.integrations.plan import AgentConfig,EnvironmentConfig,ToolConfig
@@ -41,6 +42,12 @@ class RuntimeTemplate(Model):
     tools: list[ToolConfig]=Field(default_factory=list)
     policy: dict=Field(default_factory=dict)
     required_capabilities: list[str]=Field(default_factory=list)
+    model: GatewayConfig|None=None
+    @model_serializer(mode='wrap')
+    def compatible(self,handler):
+        data=handler(self)
+        if self.model is None:data.pop('model',None)
+        return data
     @model_validator(mode='after')
     def validate_policy(self):
         policy=SecurityPolicy.model_validate(self.policy).model_dump(mode='json')
@@ -80,6 +87,7 @@ def definitions(scenario):
         for check in scenario.get(group,[]):
             selector=list(parse_path(check['path'])) if kind in {'expected','unchanged'} else check['tool_name'] if kind=='tool' else check['name']
             checks[check_id(kind,selector)]={'kind':kind,**check}
+    for check in scenario.get('evaluations',[]):checks[check_id('evaluation',check['id'])]={'kind':'evaluation',**check}
     return checks
 
 class Candidate(Model):

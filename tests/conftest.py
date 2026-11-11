@@ -6,6 +6,7 @@ from agentguard.sandbox.generic import GenericSandbox
 
 
 INTEGRATION_MODULES = {
+    "test_phase5_integration.py",
     "test_scenario_cli.py",
     "test_scenario_repository.py", "test_generated_execution.py", "test_phase3_integration.py", "test_phase3_environments.py", "test_controlled_ipc.py", "test_controlled_policy.py", "test_cli.py", "test_comparison_cli.py", "test_demo_runner.py",
     "test_demo_dashboard.py", "test_report_export.py", "test_report_dashboard.py",

@@ -11,3 +11,6 @@ from agentguard.generation.validation import validate_candidate
 from agentguard.generation.repository import ScenarioRepository,Snapshot
 from agentguard.generation.execution import SuiteRunner
 from agentguard.generation.coverage import coverage
+from agentguard.model_gateway.gateway import GatewayConfig,ModelGateway,ModelProvider,ProviderResult,GatewayEvidence
+from agentguard.evaluation.specs import EvaluationSpec,Fault,Turn
+from agentguard.evaluation.registry import EvaluationFinding,evaluate

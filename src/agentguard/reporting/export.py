@@ -225,6 +225,11 @@ AI agent behavioral testing · Local execution report
 </div>
 
 <div class="card">
+    <h2>Model gateway and usage</h2>
+    <pre>{esc(json.dumps(result.model_evidence,ensure_ascii=False,indent=2))}</pre>
+    <h2>Evaluation findings / session outputs</h2>
+    <pre>{esc(json.dumps([finding.model_dump() for finding in result.evaluations],ensure_ascii=False,indent=2))}</pre>
+    <pre>{esc(json.dumps(result.turn_outputs,ensure_ascii=False))}</pre>
     <h2>Integration evidence: {esc(result.integration_status)}</h2>
     <ul>{''.join('<li>'+esc(gap)+'</li>' for gap in result.coverage_gaps)}</ul>
     <h2>Assertions ({len(result.assertions)})</h2>
