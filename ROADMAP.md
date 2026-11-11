@@ -247,13 +247,13 @@ Deterministic DSL, bounded risk paketleri, yerel güvenilen reviewer ve HTTP obs
 sınırları `docs/phase4-verification.md` içinde. Phase 5 kullanıcı onayıyla başlatıldı; durumu aşağıda belgelenir.
 Kapı: Kullanıcı tek tek YAML yazmadan üç farklı agent türü için işe yarar taslak suite oluşturabiliyor; bilinmeyen iş kuralı uydurulmuyor.
 Faz 5 — Geniş evaluation ve gerçek model [3–5 hafta]
-- AG-050: Model gateway ve usage/budget; mock/live ayrımı. **Canlı kabul doğrulandı; son kodun CI kapanışı bekleniyor:** Provider bağımsız gateway, Gemini text REST adapter, JSON HTTP bridge, mock/live ayrımı, controller ledger ve rezervasyon/limitler uygulandı. Kullanıcının kendi terminalindeki beş çağrılık gerçek Gemini koşusu başarılı; usage ve ağa çıkmadan bütçe reddi doğrulandı. HTTP fixture gerçek LLM doğrulaması sayılmaz.
+- AG-050: Model gateway ve usage/budget; mock/live ayrımı. **Tamamlandı (belgelenen profil; gerçek Gemini ve CI):** Provider bağımsız gateway, Gemini text REST adapter, JSON HTTP bridge, mock/live ayrımı, controller ledger ve rezervasyon/limitler uygulandı. Kullanıcının kendi terminalindeki beş çağrılık gerçek Gemini koşusu başarılı; usage ve ağa çıkmadan bütçe reddi doğrulandı. HTTP fixture gerçek LLM doğrulaması sayılmaz.
 - AG-051: Output/tool/state/temporal evaluator registry. **Tamamlandı (belgelenen profil; yerel ve CI):** Versioned declarative kontroller, typed pass/fail/error/inconclusive, observation/spec hash bağları, ortak manifest/assertion/gate ve escaped JSON/HTML raporu.
 - AG-052: Retrieval/source ve coding file/test evaluators. **Tamamlandı (belgelenen profil; yerel ve CI):** Gerçek document.get audit ve exact quote/extractive grounding; gözlenen dosya hash'leri ve ayrı non-root/network-none container'da Python CLI argv/stdout oracle'ları. Aygıt/alias yolları ve case çakışmaları reddedilir; image öncesi gerçek dosya kimliği/byte'ları yeniden doğrulanır.
 - AG-053: Multi-turn session ve memory reset testleri. **Tamamlandı (belgelenen profil; yerel ve CI):** Aynı Python instance/async loop; sıralı turn IPC; yeni attempt'te yeni container/process. Sync agent'ın kendi asyncio.run kullanımı korunur. HTTP/container session desteği iddia edilmez.
-- AG-054: Optional judge calibration, human labels ve disagreement. **Canlı kabul doğrulandı; son kodun CI kapanışı bekleniyor:** Ayrık pozitif/negatif bağımsız etiketler, rubric/model sürümü, disagreement/confidence ve judge usage; hard policy/state FAIL geçersiz kılınamaz. Gerçek Gemini'de iki kalibrasyon ve bir judge çağrısı geçti; olumlu judge kararı policy ihlalini PASS yapmadı. Bu küçük etiket seti genel judge doğruluğu değildir.
+- AG-054: Optional judge calibration, human labels ve disagreement. **Tamamlandı (belgelenen profil; gerçek Gemini ve CI):** Ayrık pozitif/negatif bağımsız etiketler, rubric/model sürümü, disagreement/confidence ve judge usage; hard policy/state FAIL geçersiz kılınamaz. Gerçek Gemini'de iki kalibrasyon ve bir judge çağrısı geçti; olumlu judge kararı policy ihlalini PASS yapmadı. Bu küçük etiket seti genel judge doğruluğu değildir.
 - AG-055: Fault injection; attempt/blocked/effect ayrımı. **Tamamlandı (belgelenen profil; yerel ve CI):** Bildirilmiş pre-dispatch no-effect failure/timeout sinyalleri, explicit recovery kanıtı; permission denial ve bilinmeyen hata recovery muafiyeti alamaz. Gerçek timeout/cancellation/cleanup testleri korunur.
-**Phase 5 son CI doğrulaması bekliyor (11 Kasım 2026):** Güncel yerel tüm suite
+**Phase 5 tamamlandı (11 Kasım 2026; belgelenen destek profilleri):** Güncel yerel tüm suite
 631/631 başarılı (373 unit, 212 integration, 46 gerçek Docker; skip/failure/error yok).
 Kullanıcının `artifacts/phase5-gemini-full-verification-2.json` kaydı passed:
 iki agent prompt sürümü/karşılaştırması ve üç judge çağrısı; 331 giriş + 135 çıkış
@@ -261,9 +261,13 @@ iki agent prompt sürümü/karşılaştırması ve üç judge çağrısı; 331 g
 Üç cleanup verified; policy ihlali BLOCK kaldı ve altıncı deneme ağa çıkmadan
 engellendi. Retry yok. Dosyanın SHA256 kimliği ve destek sınırları
 `docs/phase5-verification.md` içinde. Ham canlı sonuç/anahtar Git'e eklenmez;
-CI ücretli API çağrısı yapmaz. Son teşhis düzeltmeleri için temiz wheel/CI kapanışı
-ayrıca doğrulanıyor; eski başarılı CI güncel kodun kanıtı sayılmıyor. Önceki HTTP
-hata incelemeleri ve test kayıtları doğrulama raporunda tarihsel tutulur.
+CI ücretli API çağrısı yapmaz. Son uygulama commit'i
+`9dcdc44cea80ae7d8569273dd991551f8ed24a91` için
+[GitHub Actions 43030478077](https://github.com/EgeBasturmen/agentguard/actions/runs/43030478077)
+13/13 başarılı: Windows/Ubuntu × Python 3.10–3.14, gerçek Docker, lint ve gate.
+11 artefakt, 21 JUnit ve 11 temiz wheel kaydı indirilip doğrulandı; test sayıları
+uyumlu, failure/error/skip yok. Önceki HTTP hata incelemeleri ve test kayıtları
+doğrulama raporunda tarihsel tutulur.
 Phase 6 başlatılmadı; ayrıca kullanıcı onayı gerekir.
 Kapı: Aynı görev farklı model/prompt sürümleriyle karşılaştırılabiliyor; judge safety FAIL’i örtemiyor; maliyet kaynağı açık.
 Faz 6 — Regression ve CI [2–3 hafta]

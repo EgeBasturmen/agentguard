@@ -1,7 +1,8 @@
 # Phase 5: model gateway, evaluation ve oturumlar
 
-**Güncel durum (11 Kasım 2026):** Kullanıcının beş çağrılık gerçek Gemini
-doğrulaması başarılı; son teşhis düzeltmelerinin test/wheel/CI kapanışı doğrulanıyor.
+**Güncel durum (11 Kasım 2026): Phase 5 / AG-050–055 belgelenen destek profilleriyle
+tamamlandı.** Kullanıcının beş çağrılık gerçek Gemini doğrulaması ve son kodun
+631 testi, temiz wheel kurulumu ve 13/13 CI işi başarılı.
 Aşağıdaki eski başarısız koşular ve bekleyen canlı test notları tarihsel kayıtlardır;
 güncel canlı kanıt belgenin sonundadır. Phase 6 başlatılmadı.
 
@@ -438,4 +439,20 @@ Phase 5 toplam 87 yeni case içerir. İzole sdist ve sdist'ten wheel build başa
 CLI/verdict parity, önceki execution/generation profilleri, gateway/evaluation ve
 gerçek Docker worker/session akışı passed. real_llm_verified=false bu wheel
 probe'un offline protokol fixture'ı olduğunu belirtir; ayrı kullanıcı canlı
-kanıtıyla çelişmez. Son commit CI kapanışı bekleniyor.
+kanıtıyla çelişmez.
+
+Son uygulama commit'i `9dcdc44cea80ae7d8569273dd991551f8ed24a91` için
+[CI 43030478077](https://github.com/EgeBasturmen/agentguard/actions/runs/43030478077)
+13/13 başarılı. On Windows/Ubuntu × Python 3.10–3.14 job'ının her birinde
+373 unit + 212 integration testi ve runtime-only temiz wheel doğrulaması;
+ayrı Docker job'ında 46 test ve paketlenmiş worker/gateway/session doğrulaması;
+lint ve zorunlu gate başarılı. 11 artefakt ZIP içindeki 21 JUnit ve 11 wheel JSON'u
+indirilip sayı, feature flag, failure/error/skip=0 koşullarıyla kontrol edildi.
+CI'daki real_llm_verified=false offline fixture kapsamını doğru belirtir; başarılı
+gerçek Gemini kanıtı yukarıdaki kullanıcı koşusudur. API anahtarı CI'a taşınmadı.
+
+AG-050/054'ün canlı kabul bekleyişi böylece kaldırıldı; AG-050–055 destek profilleriyle
+kapatıldı. Son kapanış kaydı yalnız ROADMAP ve bu raporu değiştirir; uygulama kodu
+doğrulanan source commit ile aynıdır. Main/özgün index/kullanıcı dosyaları/rapor
+hash kontrolleri başarılı; canlı sonuçlar ve test artefaktları Git dışında tutuldu.
+Phase 6 kullanıcı onayı olmadan başlatılmaz.
