@@ -223,3 +223,10 @@ Son kodun tam suite'i **664/664 başarılı**: 382 unit, 235 integration, 47 ger
 Docker, failure/error/skip yok; 318,12 saniye. Phase 0–5'in 631 testi korunur,
 Phase 6 toplam 33 yeni case içerir. JUnit: `artifacts/phase6-redaction-final-tests.xml`.
 Yeni izole sdist/wheel build başarılı; son temiz kurulum ve yeni CI kontrolü bekleniyor.
+
+Redaction kodunun temiz wheel kontrolü `artifacts/phase6-redaction-wheel.json`
+içinde geçti; aynı Phase 3–6 ve gerçek Docker feature flag'leri doğrulandı.
+Son preflight incelemesinde bilinmeyen critical/quarantine case ID'sinin ancak
+attempt'ten sonra reddedildiği görüldü. Önce execution counter ile RED üretildi;
+policy scope artık herhangi bir agent execution'ından önce doğrulanır. Hedefli
+21 test geçti; 665 case'lik son tam koşu ve yeni source CI doğrulaması sürüyor.

@@ -101,6 +101,8 @@ class RepeatRunner:
             selection=ProfileSelection.model_validate(selection.model_dump(mode='json'))
             if selection.snapshot!=snapshot or selection.execution_policy()!=policy:raise ValueError('Profile mismatch before execution')
         repository.check_snapshot(snapshot)
+        ids={pin['id'] for pin in snapshot.cases}
+        if set(policy.critical_cases or [])-ids or {q.case_id for q in policy.quarantines}-ids:raise ValueError('Unknown policy case before execution')
         for pin in snapshot.cases:
             runtime=repository.admission(snapshot,pin)[0].runtime
             external=runtime.agent.transport=='http' or runtime.environment.kind=='http' or any(tool.endpoint is not None for tool in runtime.tools)

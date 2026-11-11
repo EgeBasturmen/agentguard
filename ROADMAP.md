@@ -276,11 +276,12 @@ Faz 6 — Regression ve CI [2–3 hafta]
 - AG-062: PR/scheduled/release suite profiles, JUnit/JSON/HTML. **Uygulandı; CI doğrulaması bekliyor:** Critical coverage düşürülemez, release tam kapsam ister; dışarıda kalan PR case'leri görünür. Aynı gate'ten veri minimize edilmiş üç rapor; gerçek source regresyonunu bloklayan Docker CI kontrolü. Schedule yalnız default branch'te otomatik işler; development dalına yapılandırma eklemek default branch deployment değildir.
 - AG-063: Replay/repro bundle ve sensitive data export sınırı. **Uygulandı; yerelde doğrulandı:** Varsayılan metadata, explicit per-field case-data onayı, bilinen secret/redaction kontrolleri, source hash ile offline Python/Docker + local environment/pinned replay. Redacted bundle runnable değildir; repro release approval vermez. Genel PII/DLP, HTTP/container/live-model offline repro iddiası yoktur.
 - AG-064: Tek gate API, exit codes ve version compatibility. **Uygulandı; yerelde doğrulandı:** SDK/CLI/JSON/HTML/JUnit ortak GateAPI; aktif approved baseline ve current scenario kontrolü; typed loader, sürüm/fingerprint/summary-forgery reddi. Exit 0 ALLOW, 1 doğrulanmış blok, 2 geçersiz evidence/operasyon; outcome altyapı ve belirsizliği ayırır.
-**Phase 6 devam ediyor:** Son kodda 664/664 test başarılı
+**Phase 6 devam ediyor:** Redaction düzeltmesiyle 664/664 test başarılı
 (382 unit, 235 integration, 47 gerçek Docker; skip/failure/error yok); Phase 0–5'in
 631 testi korundu. Scheduled ve release profillerinde gerçek source regresyonu
 gerekçeli BLOCK oldu; mevcut source ALLOW. Son temiz wheel ve GitHub CI kabul
-kontrolleri tamamlanmadan Phase 6 kapatılmaz.
+kontrolleri tamamlanmadan Phase 6 kapatılmaz. Son ek preflight düzeltmesi, bilinmeyen
+policy case'ini agent çalışmadan reddeder; hedefli testleri geçti, tam doğrulaması sürüyor.
 İnceleme, bağımlılıklar, riskler ve test kanıtı: `docs/phase6-verification.md`.
 Ücretli LLM/API çağrısı yapılmadı. Main ve kullanıcı dosyaları korunur.
 Kapı: Gerçek bir değişiklik CI’da nedenleriyle bloklanıyor; aynı veri bütün yüzeylerde aynı kararı üretiyor.

@@ -61,6 +61,16 @@ def test_default_repeat_execution_refuses_external_side_effects(baseline_input):
     scenarios,execution,_=baseline_input
     with pytest.raises(ValueError):RepeatRunner().run(scenarios,execution.snapshot,base_dir=scenarios.path.parent,count=2,policy=RepeatPolicy())
 
+def test_unknown_policy_case_is_rejected_before_any_execution(baseline_input,monkeypatch):
+    import agentguard.regression.repeats as module
+    scenarios,execution,_=baseline_input
+    calls=[]
+    def execute(*args,**kwargs):calls.append(True);return execution
+    monkeypatch.setattr(module.SuiteRunner,'run',execute)
+    with pytest.raises(ValueError):module.RepeatRunner().run(scenarios,execution.snapshot,base_dir=scenarios.path.parent,
+        count=1,policy=module.RepeatPolicy(critical_cases=['unknown']),allow_external=True)
+    assert calls==[]
+
 
 def test_explicit_tool_tolerance_does_not_override_critical_or_hard_failure():
     from agentguard.regression.repeats import RepeatPolicy,apply_tolerance
