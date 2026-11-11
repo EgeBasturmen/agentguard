@@ -74,6 +74,9 @@ def import_dataset(path):
         with path.open('r',encoding='utf-8',newline='') as stream:
             text=stream.read(MAX_DATASET_BYTES+1)
         if len(text.encode())>MAX_DATASET_BYTES:raise ValueError('CSV exceeds limit')
+        # csv's platform default (128 KiB) otherwise rejects our own valid exports.
+        # The complete input is already bounded above; never reduce a caller's limit.
+        csv.field_size_limit(max(csv.field_size_limit(),MAX_DATASET_BYTES))
         reader=csv.DictReader(io.StringIO(text))
         if reader.fieldnames!=['record_type','id','revision','payload']:raise ValueError('Unsupported dataset CSV columns')
         cases=[];metadata=None

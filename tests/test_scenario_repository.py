@@ -118,3 +118,12 @@ def test_raw_generated_scenario_does_not_bypass_release_gate():
     result=ScenarioRunner(GenericSandbox).run(scenario,Agent())
     assert result.passed
     assert not effective_pass(result) and result.admission_status=='unapproved'
+
+
+def test_csv_roundtrip_supports_fixtures_within_declared_byte_budget(tmp_path):
+    from agentguard.generation.models import GenerationRequest
+    from agentguard.generation.io import export_dataset,import_dataset
+    data=request().model_dump();data['fixture']['protected']='x'*150000
+    batch=generate(GenerationRequest.model_validate(data))
+    path=tmp_path/'large-fixture.csv';export_dataset(batch,path)
+    assert import_dataset(path).cases==batch.cases
