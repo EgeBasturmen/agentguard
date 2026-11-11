@@ -98,9 +98,9 @@ jobs:
         run: |
           docker build -f docker/Dockerfile.worker -t agentguard-worker:dev .
           docker pull python:3.11-slim
-      - name: Real Docker agents, Phase 3 connectors/environments and isolation tests (no skips)
+      - name: Real Docker agents, connectors, approved generated scenarios and isolation tests (no skips)
         run: python -m pytest -q -m docker --junitxml=artifacts/docker.xml
-      - name: Build distribution and verify controlled execution and integration CLI from a clean wheel
+      - name: Build distribution and verify execution, integrations and generation lifecycle from a clean wheel
         run: |
           python -m build --outdir artifacts/dist
           python scripts/check_wheel.py artifacts/dist --docker --result artifacts/docker-wheel-check.json

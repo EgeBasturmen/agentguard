@@ -27,6 +27,9 @@ class AssertionResult(BaseModel):
 
 class RunResult(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
+    generation_ref: dict | None = None
+    admission_status: Literal["external", "unapproved", "approved", "stale"] = "external"
+    approval_evidence: dict | None = None
     integration_status: Literal["not_applicable", "verified", "unverified", "unsupported"] = "not_applicable"
     coverage_gaps: list[str] = Field(default_factory=list)
     integration_manifest: dict = Field(default_factory=dict)

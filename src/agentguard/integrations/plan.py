@@ -61,10 +61,16 @@ def run_plan(path,*,cancel_event=None,preflight_only=False):
     parsed=_json(data)
     if type(parsed.get('schema_version')) is not int: raise ValueError('Integer plan schema_version required')
     plan=IntegrationPlan.model_validate(parsed)
+    return run_integration_plan(plan,base_dir=path.parent,cancel_event=cancel_event,preflight_only=preflight_only)
+
+
+def run_integration_plan(plan,*,base_dir, cancel_event=None,preflight_only=False,expected_contracts=None):
+    plan=IntegrationPlan.model_validate(plan.model_dump(mode='json'))
+    base_dir=Path(base_dir).resolve()
     config=plan.agent
     if config.transport=='python':
         if not config.reference or config.endpoint is not None or config.image is not None: raise ValueError('Python agent requires a source reference only')
-        source=(path.parent/config.source_dir).resolve()
+        source=(base_dir/config.source_dir).resolve()
         agent=PythonAgent(AgentLaunchSpec(reference=config.reference,source_dir=source,include_files=config.include_files))
     elif config.transport=='container':
         if not config.image or config.endpoint is not None: raise ValueError('Container agent requires a pinned image')
@@ -98,6 +104,10 @@ def run_plan(path,*,cancel_event=None,preflight_only=False):
             approved=config.approved_effects.get(contract.name)
             contract=contract.model_copy(update={'effect_type':approved or 'unknown'})
             tools.append(RoutedTool(contract,mode='staging',target=connector,approved_effect=approved is not None))
+    if expected_contracts is not None:
+        actual={tool.contract.name:tool.contract.model_dump() for tool in tools}
+        for contract in expected_contracts:
+            if canonical_json(actual.get(contract['name']))!=canonical_json(contract):raise ValueError('Pinned generation contract changed or is absent: '+contract['name'])
     if preflight_only:
         return preflight(plan.scenario,agent,environment,tools,SecurityPolicy.model_validate(plan.policy),plan.required_capabilities)
     return IntegrationRunner().run(plan.scenario,agent,environment,tools,policy=SecurityPolicy.model_validate(plan.policy),

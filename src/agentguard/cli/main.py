@@ -632,5 +632,8 @@ def demo_command(
         f"{summary['index']}"
     )
 
+from agentguard.generation.cli import app as scenario_app
+app.add_typer(scenario_app,name="scenario")
+
 if __name__ == "__main__":
     app()

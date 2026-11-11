@@ -71,6 +71,7 @@ class Invariant(NamedSpec):
 class Scenario(NamedSpec):
     name: str
     task: str
+    generation: dict | None = None
     initial_state: dict[str, Any]
     expected_state: list[ExpectedState] = Field(default_factory=list)
     forbidden_changes: list[ForbiddenChange] = Field(default_factory=list)

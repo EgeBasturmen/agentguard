@@ -229,6 +229,10 @@ Faz 3 — Genel connector ve environment sistemi [3–5 hafta]
 **Phase 3 tamamlandı (10 Kasım 2026, belgelenen destek profilleri):** 497/497 yerel test (300 unit, 168 integration, 29 gerçek Docker), failure/error/skip yok. Phase 0–2'nin 448 testi korunur; 49 yeni Phase 3 case'i vardır. Nihai kaynak `0ce264784a97bf38d65d4068574b11720c713b5f` için [GitHub Actions 42897469627](https://github.com/EgeBasturmen/agentguard/actions/runs/42897469627) 13/13 başarılı: Linux/Windows × Python 3.10–3.14, ayrı gerçek Docker/temiz wheel entegrasyonu, lint ve zorunlu gate. 11 artifact, 21 JUnit ve 11 temiz wheel kaydı indirildi ve doğrulandı. Nested schema resource/dialect ve rapor şema doğrulaması dahil fail-closed sınırlar testlidir. Destek/kalan riskler ve dosya listesi `docs/phase3-verification.md` içinde. Phase 4 kullanıcı onayını bekler.
 Kapı: Dış kullanıcının mevcut tool’u yeniden yazılmadan bağlanıyor; eksik gözlem PASS diye gösterilmiyor. Desteklenmeyen özel protokol için örnek adapter var.
 Faz 4 — Senaryo ve dataset ürünü [3–4 hafta]
+**Uygulama doğrulama aşamasında:** AG-040–045 kodu ve regression testleri aynı
+`codex/development` checkout'unda geliştirildi. Tamamlanma durumu tüm yerel,
+gerçek Docker, temiz wheel ve GitHub CI kanıtları toplandıktan sonra işaretlenecek.
+Kapsam ve sınırlamalar: `docs/phase4-verification.md`.
 - AG-040: Rule/task import, kaynak ve çelişki gösterimi.
 - AG-041: Capability/risk paketleri ve senaryo generator.
 - AG-042: Fixture/oracle validation, deduplication ve generation provenance.

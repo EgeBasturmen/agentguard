@@ -75,7 +75,9 @@ modules = ["agentguard", "agentguard.cli.main", "agentguard.runner.runner",
            "agentguard.reporting.models", "agentguard.reporting.comparison",
            "agentguard.orchestration.controller", "agentguard.execution.controlled_runtime",
            "agentguard.execution.agent_spec", "agentguard.sdk", "agentguard.integrations.plan",
-           "agentguard.environments.adapters"]
+           "agentguard.environments.adapters", "agentguard.generation.generator",
+           "agentguard.generation.repository", "agentguard.generation.execution",
+           "agentguard.generation.io", "agentguard.generation.coverage"]
 for name in modules:
     location = Path(importlib.import_module(name).__file__).resolve()
     assert location.is_relative_to(root), (name, location, root)
@@ -127,6 +129,32 @@ print(json.dumps({"version": distribution.version, "python": sys.version.split()
         invalid.write_text("name: invalid\ntask: x\ninitial_state: {}\n", encoding="utf-8")
         error = run([cli, "test", "--trusted-local", "--agent", "never_import:Agent", "--scenario", invalid], expected=2)
         assert "Scenario error" in error
+        # A clean installed wheel must expose the complete explicit review lifecycle.
+        request = dict(schema_version=1, task="Write done to note.txt", fixture={"files":{"note.txt":"draft"}},
+            runtime=dict(agent=dict(transport="python",reference="runtime_agent:WorkspaceAgent",source_dir="."),
+                environment=dict(kind="filesystem"),tools=[dict(connector="environment")],policy=dict(allowed_tools=["file.write"])),
+            rules=[dict(id="goal",text='expect files.note\\.txt = "done"'),dict(id="tool",text="tool file.write times 1")])
+        request_path=work/"generation-request.json";request_path.write_text(json.dumps(request),encoding="utf-8")
+        database=work/"scenarios.sqlite";dataset=work/"drafts.json";snapshot=work/"suite.json"
+        generated=json.loads(run([cli,"scenario","generate",request_path,"--db",database,"--output",dataset]))
+        assert generated["drafts"]>0 and generated["approved"]==0 and generated["review_required"]
+        case=json.loads(dataset.read_text(encoding="utf-8"))["cases"][0]
+        run([cli,"scenario","freeze","release","--db",database,"--member",case["id"]+":1","--output",snapshot],expected=2)
+        validation=json.loads(run([cli,"scenario","validate",case["id"],1,"--db",database]))
+        assert validation["ready_for_review"] and validation["review_required"]
+        review=[cli,"scenario","review",case["id"],1,"--db",database,"--reviewer","wheel-fixture-reviewer","--confirm-fixture","--confirm-classification"]
+        for identity in validation["oracle_ids"]:review.extend(["--confirm-oracle",identity])
+        run(review)
+        run([cli,"scenario","approve",case["id"],1,"--db",database,"--reviewer","wheel-fixture-approver","--fingerprint",case["fingerprint"]])
+        run([cli,"scenario","freeze","release","--db",database,"--member",case["id"]+":1","--output",snapshot])
+        for suffix in ("json","yaml","csv"):
+            exported=work/("dataset-export."+suffix)
+            run([cli,"scenario","export","--db",database,"--member",case["id"]+":1","--output",exported])
+            imported=json.loads(run([cli,"scenario","import",exported,"--db",work/("import-"+suffix+".sqlite")]))
+            assert imported["approved"]==0 and imported["imported"][0]["status"]=="draft"
+        matrix=json.loads(run([cli,"scenario","coverage",dataset,"--db",database]))
+        assert matrix["missing_executed"] and all(row["passed"]==0 for row in matrix["rows"])
+        details["phase4_lifecycle"] = True
         if docker:
             source = work / "runtime_agent.py"
             source.write_text(
@@ -169,6 +197,16 @@ print(json.dumps({"version": distribution.version, "python": sys.version.split()
             assert integration["result"]["cleanup_status"]=="verified"
             run([cli,"compare",integration_path,integration_path,"--html-report",work/"integration.html"])
             details["phase3_integration"] = True
+            generated_report=work/"generated-run.json"
+            outcome=json.loads(run([cli,"scenario","run",snapshot,"--db",database,"--base-dir",work,"--output",generated_report]))
+            assert outcome["gate_decision"]=="ALLOW" and outcome["passed"]
+            generated_evidence=json.loads(generated_report.read_text(encoding="utf-8"))
+            member=generated_evidence["cases"][0]["result"]
+            assert member["admission_status"]=="approved" and member["cleanup_status"]=="verified"
+            assert member["audit"] and member["run_manifest"]["completed"] and member["approval_evidence"]
+            matrix=json.loads(run([cli,"scenario","coverage",dataset,"--db",database,"--execution",generated_report]))
+            assert any(row["passed"] for row in matrix["rows"]) and matrix["missing_executed"]
+            details["phase4_generation"] = True
         details.update({"wheel": wheel.name, "runtime_only": True, "outside_checkout": True,
                         "console_cli": True, "verdict_parity": True, "status": "passed"})
         return details

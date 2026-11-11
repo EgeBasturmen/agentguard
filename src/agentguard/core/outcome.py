@@ -9,6 +9,23 @@ from agentguard.contracts.compatibility import supported_matrix
 def evidence_errors(result: RunResult) -> list[str]:
     """Shared evidence integrity checks for run and comparison decisions."""
     problems = []
+    if result.generation_ref is not None or result.admission_status != "external":
+        try:
+            from agentguard.generation.evidence import ApprovalEvidence
+            from agentguard.core.manifest import digest
+            if result.admission_status != "approved" or result.generation_ref is None or result.approval_evidence is None:
+                raise ValueError("Generated case is not approved for release")
+            receipt = ApprovalEvidence.model_validate(result.approval_evidence)
+            reference = result.generation_ref
+            if reference != dict(case_id=receipt.case_id,revision=receipt.revision,candidate_fingerprint=receipt.candidate_fingerprint,scenario_fingerprint=receipt.scenario_fingerprint):
+                raise ValueError("Approval/case binding mismatch")
+            manifest = result.comparison_manifest
+            if manifest is None or manifest.fingerprint != receipt.comparison_fingerprint:
+                raise ValueError("Approved comparison context changed")
+            if manifest is None or manifest.scenario.generation != reference or digest(manifest.scenario.model_dump(mode="json",exclude={"generation"})) != receipt.scenario_fingerprint:
+                raise ValueError("Generated scenario content changed after approval")
+        except (ValueError,TypeError,KeyError):
+            problems.append("Generated scenario release admission is missing, stale or inconsistent.")
     if result.integration_status in {"unverified", "unsupported"}:
         problems.append("Integration evidence is not verified.")
     if result.integration_status == "verified":

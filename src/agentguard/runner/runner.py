@@ -42,6 +42,8 @@ class ScenarioRunner:
         result = RunResult(
             scenario_name=scenario.name, passed=False, status="error",
             execution_context=local_context(),
+            generation_ref=scenario.generation,
+            admission_status="unapproved" if scenario.generation is not None else "external",
         )
 
         def record_error(exc: Exception, stage: str) -> None:

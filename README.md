@@ -213,3 +213,15 @@ agentguard integration examples/phase3_plan.json --json-report reports/run.json 
 ```
 
 [Phase 3 API, destek profilleri ve doğrulama kaydı](docs/phase3-verification.md).
+
+## Phase 4 senaryo üretimi
+
+`agentguard scenario generate examples/phase4_request.json --db artifacts/scenarios.sqlite --output artifacts/drafts.json`
+task/rule, tool contract, trace/incident ve sürümlü risk paketlerinden genel taslaklar üretir.
+Python, HTTP ve container agent aynı generation/review/execution hattını kullanır.
+Her oracle ve fixture açıkça incelenip onaylanmadan frozen release suite'e alınmaz.
+Trace sonucu otomatik doğru cevap değildir; bilinmeyen beklenti INCONCLUSIVE kalır.
+
+CSV/JSON/YAML import-export, immutable revision, stale/retire, gerçek execution
+kanıtına bağlı benign/adversarial/edge coverage ve zorunlu coverage gate desteklenir.
+[CLI akışı, API sınırları ve doğrulama kaydı](docs/phase4-verification.md).
