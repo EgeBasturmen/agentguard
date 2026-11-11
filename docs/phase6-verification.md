@@ -1,8 +1,13 @@
 # Phase 6: regression ve CI
 
+**Güncel durum (12 Kasım 2026): AG-060–064 belgelenen destek profilleriyle
+tamamlandı.** Son kodun 666 testi, temiz wheel kurulumu ve 13/13 CI işi başarılı;
+11 CI artefaktının içeriği doğrulandı. Ara testler ve bekleme notları tarihsel
+kayıttır; güncel kapanış kanıtı sondadır. Phase 7 başlatılmadı.
+
 Başlangıç: aynı checkout, `codex/development`, doğrulanmış Phase 5 HEAD
 `64dce93c7f841c31010f143bf97c6dd105084e74`. Phase 0–5'in 631 testi korunur.
-Ana referans ROADMAP §9, Phase 6 AG-060–064 ve faz kapısıdır. Phase 6 tamamlanmadı.
+Ana referans ROADMAP §9, Phase 6 AG-060–064 ve faz kapısıdır.
 
 ## Mevcut mimariyle karşılaştırma ve sıra
 
@@ -188,7 +193,7 @@ context manager'ın connection'ı kapatmamasını ortaya çıkardı. Önce track
 regression testi eklendi; ScenarioRepository ve yeni BaselineRepository artık
 connection'ı finally ile kapatır. Cleanup hatası bastırılmadı.
 
-## Güncel toplu doğrulama
+## Ara toplu doğrulama kayıtları (tarihsel)
 
 AG-060–064 kodu uygulandı. Son tam suite **661/661 başarılı**: 379 unit,
 235 integration, 47 gerçek Docker; failure/error/skip yok, 293,00 saniye.
@@ -239,3 +244,55 @@ gerçek HTTP entegrasyon ve Docker PR kontrolünde önce RED üretti. Gate artı
 excluded case varsa `authorizes_release=false` verir; seçilen scope'un ALLOW/BLOCK
 kararı değişmez. Tam release scope'u bütün üyeleri zorunlu tutmaya devam eder.
 Bu son ayrım için 666 case'lik tam suite, temiz wheel ve CI kontrolü bekleniyor.
+
+## Doğrulanmış Phase 6 kapanışı
+
+Uygulama kaynağı `032e6d7e9b9a0961597de23e4f11a8ecbf7aa19b`, aynı checkout ve
+`codex/development` dalı. Son yerel suite **666/666 başarılı**: 382 unit,
+237 integration, 47 gerçek Docker; failure/error/skip yok, 309,34 saniye.
+JUnit: `artifacts/phase6-release-scope-tests.xml`. Önceki 631 Phase 0–5 case'i
+korunur, 35 yeni Phase 6 case'i eklenir: AG-060 10, AG-061 11, AG-062 2,
+AG-063 7, AG-064 5. Ürün profil kontrolleri bu pytest sayısına dahil değildir.
+
+İzole sdist ve sdist'ten wheel build başarılı. Son temiz runtime-only ve checkout
+dışı kurulum `artifacts/phase6-release-scope-wheel.json` içinde passed;
+Phase 3/4/5 özellikleri, CLI/verdict parity, gerçek Docker worker, baseline lifecycle
+ve regression gate feature flag'leri doğrulandı. Kurulu wheel'in PR kontrolünde
+mevcut source ALLOW, hatalı source BLOCK; excluded case nedeniyle tam release
+yetkisi false'tur. Gerçek LLM/API çağrısı yapılmadı.
+
+Son kodun scheduled (2 case × 3 örnek) ve release (2 × 5 örnek) gerçek Docker
+profilleri `artifacts/phase6-final-scheduled-profile` ve
+`artifacts/phase6-final-release-profile` içinde passed. Her birinde golden/mevcut/
+değiştirilmiş agent source'u gerçekten container içinde çalıştı. Hatalı source
+assertion/state mutation kodlarıyla BLOCK oldu; mevcut source tam kapsamla ALLOW.
+Fixture bağımsız belirtilmiş oracle kullanır; model cevabı ground truth sayılmaz.
+
+[Son source CI 43113986518](https://github.com/EgeBasturmen/agentguard/actions/runs/43113986518)
+**13/13 başarılı**: Ubuntu 24.04 / Windows 2022 × Python 3.10–3.14 on job'ın
+her birinde 382 unit + 237 integration ve temiz runtime-only wheel; ayrı Docker
+job'ında 47 test, kurulu wheel ve gerçek source regression gate; workflow lint
+ve zorunlu gate başarılı. 11 ZIP indirildi; 21 pytest JUnit ve 11 wheel-check JSON
+sayı/feature flag/failure/error/skip=0 ile doğrulandı. Docker ürün JSON/HTML/JUnit
+raporları ayrıca incelendi: current ALLOW/exit0, known-bad BLOCK/exit1 ve typed
+regression nedenleri tutarlı; known-bad JUnit'in kasıtlı failure'ı beklendiği gibi
+korunuyor. Dar PR kapsamı her iki raporda tam release yetkisi vermiyor.
+
+Bu kapanış kaydı yalnız ROADMAP ve bu raporu günceller; uygulama kodu yukarıdaki
+doğrulanmış source commit'i ile aynıdır. Main ve Phase 2 remote ref'leri; özgün
+çalışma dizini HEAD/branch/index/status/kullanıcı dosyaları ve checkout kullanıcı
+raporları korunmuştur. Kullanıcının Phase 5 canlı sonuç dosyasının SHA256'ı hâlâ
+`46650e2375cada19e0bcbbf18cf9a8bd134feee9e2f31b0b6ba7f923ce48110e`.
+Key/.env, kullanıcı canlı sonuçları, SQLite DB, wheel ve test artefaktları commit'e
+alınmadı. Yeni repo/worktree oluşturulmadı.
+
+Kalan sınırlar: yerel güvenilen operatör/OS yetkisi; hash'ler imza veya SaaS RBAC
+değildir. Wilson aralıkları küçük örnekle genel agent/model doğruluğu göstermez.
+Tolerans profili bounded noncritical tool count ile sınırlıdır. Remote HTTP
+servisinin state'ini sistem kendiliğinden resetlemez; repeat dış etki izni ister,
+remote reset/transaction izolasyonu garantisi verilmez. Repro local Python
+ve offline environment/replay profilidir; canlı HTTP/container/model yeniden
+üretimi veya genel PII temizleme garantisi verilmez. Schedule yapılandırması
+development dalında doğrulanmıştır; main'e merge edilmediği için default branch'te
+otomatik schedule deploy edildiği iddia edilmez. Phase 7 kullanıcı onayı olmadan
+başlatılmaz.
