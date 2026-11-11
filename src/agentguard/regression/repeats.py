@@ -1,5 +1,6 @@
 """Finite paired observations over the existing suite runner and comparator."""
 import math
+import uuid
 from datetime import datetime,timezone,timedelta
 from typing import Literal
 from pydantic import Field,model_validator,model_serializer
@@ -41,6 +42,13 @@ class RepeatPolicy(Model):
         return self
 
 
+class CollectionReceipt(Model):
+    schema_version: int=1
+    collector: Literal['suite-runner-v1']='suite-runner-v1'
+    collection_id: str=Field(pattern=r'^[0-9a-f]{32}$')
+    execution_digest: str=Field(pattern=r'^[0-9a-f]{64}$')
+
+
 class RepeatBatch(Model):
     schema_version: int=1
     snapshot: Snapshot
@@ -65,9 +73,9 @@ class RepeatBatch(Model):
             if selection.snapshot!=self.snapshot or selection.execution_policy()!=self.policy:raise ValueError('Profile scope/policy changed')
         ids={pin['id'] for pin in self.snapshot.cases}
         if set(self.policy.critical_cases or [])-ids or {q.case_id for q in self.policy.quarantines}-ids:raise ValueError('Unknown policy case')
-        hashes=set();run_ids=set();independent=0;retry_chain=0
+        hashes={};collections=set();run_ids=set();independent=0;retry_chain=0
         for index,row in enumerate(self.attempts,1):
-            if set(row) not in ({'index','execution'},{'index','execution','retry_of'}) or type(row['index']) is not int or row['index']!=index:raise ValueError('Attempt ordering mismatch')
+            if not {'index','execution'}<=set(row) or set(row)-{'index','execution','retry_of','receipt'} or type(row['index']) is not int or row['index']!=index:raise ValueError('Attempt ordering mismatch')
             if 'retry_of' in row:
                 retry_chain+=1
                 if type(row['retry_of']) is not int or row['retry_of']!=index-1 or index==1 or retry_chain>self.policy.infrastructure_retries or not retryable(checked_execution(self.attempts[index-2]['execution'])):raise ValueError('Retry is not an authorized pre-execution provision failure')
@@ -75,8 +83,12 @@ class RepeatBatch(Model):
             execution=checked_execution(row['execution'])
             if execution.snapshot!=self.snapshot:raise ValueError('Attempt suite changed')
             value=digest(row['execution'])
-            if value in hashes:raise ValueError('Copied evidence is not an independent attempt')
-            hashes.add(value)
+            receipt=CollectionReceipt.model_validate(row['receipt']) if 'receipt' in row else None
+            if receipt is not None:
+                if receipt.execution_digest!=value or receipt.collection_id in collections:raise ValueError('Collection receipt is copied or contradicts execution')
+                collections.add(receipt.collection_id)
+            if value in hashes and (receipt is None or not hashes[value]):raise ValueError('Copied legacy evidence is not an independent attempt')
+            hashes[value]=receipt is not None and hashes.get(value,True)
             for member in execution.cases:
                 if member.result and member.result.run_manifest:
                     run_id=member.result.run_manifest.run_id
@@ -111,8 +123,10 @@ class RepeatRunner:
         attempts=[]
         for _ in range(count):
             for retry in range(policy.infrastructure_retries+1):
+                collection_id=uuid.uuid4().hex
                 execution=SuiteRunner().run(repository,snapshot,base_dir=base_dir,cancel_event=cancel_event)
                 row=dict(index=len(attempts)+1,execution=execution.model_dump(mode='json'))
+                row['receipt']=CollectionReceipt(collection_id=collection_id,execution_digest=digest(row['execution'])).model_dump(mode='json')
                 if retry:row['retry_of']=len(attempts)
                 attempts.append(row)
                 if not retryable(execution):break

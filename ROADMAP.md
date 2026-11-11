@@ -276,8 +276,8 @@ Faz 6 — Regression ve CI [2–3 hafta]
 - AG-062: PR/scheduled/release suite profiles, JUnit/JSON/HTML. **Tamamlandı; CI doğrulandı:** Critical coverage düşürülemez, release tam kapsam ister; dışarıda kalan PR case'leri görünür. Aynı gate'ten veri minimize edilmiş üç rapor; gerçek source regresyonunu bloklayan Docker CI kontrolü. Schedule yalnız default branch'te otomatik işler; development dalına yapılandırma eklemek default branch deployment değildir.
 - AG-063: Replay/repro bundle ve sensitive data export sınırı. **Tamamlandı; yerel/CI doğrulandı:** Varsayılan metadata, explicit per-field case-data onayı, bilinen secret/redaction kontrolleri, source hash ile offline Python/Docker + local environment/pinned replay. Redacted bundle runnable değildir; repro release approval vermez. Genel PII/DLP, HTTP/container/live-model offline repro iddiası yoktur.
 - AG-064: Tek gate API, exit codes ve version compatibility. **Tamamlandı; yerel/CI doğrulandı:** SDK/CLI/JSON/HTML/JUnit ortak GateAPI; aktif approved baseline ve current scenario kontrolü; typed loader, sürüm/fingerprint/summary-forgery reddi. Exit 0 ALLOW, 1 doğrulanmış blok, 2 geçersiz evidence/operasyon; outcome altyapı ve belirsizliği ayırır.
-**Phase 6 tamamlandı (12 Kasım 2026), belgelenen destek profilleriyle.**
-Son kodda 666/666 test başarılı (382 unit, 237 integration, 47 gerçek Docker;
+**Phase 6 son CI regresyonu nedeniyle yeniden doğrulanıyor (12 Kasım 2026).**
+Önceki source commit'inde 666/666 test başarılı (382 unit, 237 integration, 47 gerçek Docker;
 failure/error/skip yok); önceki 631 test korundu. Temiz sdist/wheel, checkout dışında
 runtime-only kurulum ve üç gerçek Docker profili doğrulandı. Hatalı source gerekçeli
 BLOCK oldu; dar PR ALLOW tam release yetkisi vermiyor.
@@ -286,6 +286,10 @@ BLOCK oldu; dar PR ALLOW tam release yetkisi vermiyor.
 kararları indirip doğrulandı. Kaynak commit: `032e6d7e9b9a0961597de23e4f11a8ecbf7aa19b`.
 İnceleme, test kanıtı ve açık destek sınırları: `docs/phase6-verification.md`.
 Ücretli LLM/API çağrısı yapılmadı. Main, özgün index ve kullanıcı dosyaları korundu.
+Belge kapanış CI tekrarında Windows/Python 3.10 collection hash çakışması bulundu.
+Gerçek HTTP/sabit saat regression'ı önce RED üretildi; unique collector receipt
+ve execution-digest bağı uygulandı. Son 667 test/wheel/CI doğrulaması bekleniyor;
+bu düzeltme doğrulanmadan Phase 6 yeniden kapatılmaz.
 Phase 7 kullanıcı onayı olmadan başlatılmaz.
 Kapı: Gerçek bir değişiklik CI’da nedenleriyle bloklanıyor; aynı veri bütün yüzeylerde aynı kararı üretiyor.
 Faz 7 — Web yönetimi ve private-runner pilot [4–6 hafta]

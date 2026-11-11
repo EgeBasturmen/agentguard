@@ -20,7 +20,27 @@ def test_repeat_runner_really_resets_and_pairs_every_attempt(baseline_input):
     assert result.passed and result.paired_attempts==3
     assert result.cases[0]['candidate_pass_rate']==1.0
     assert result.cases[0]['candidate_interval_95'][0]<1.0
-    assert len({row['execution']['cases'][0]['result']['traces'][0]['timestamp'] for row in candidate.attempts})==3
+    assert len({row['receipt']['collection_id'] for row in candidate.attempts})==3
+
+def test_real_http_attempts_with_identical_clock_are_distinct_collections(baseline_input,monkeypatch):
+    import agentguard.core.trace as trace
+    import agentguard.regression.repeats as module
+    from agentguard.core.manifest import digest
+    fixed=datetime(2026,1,1,tzinfo=timezone.utc)
+    class Clock:
+        @staticmethod
+        def now(tz):return fixed
+    monkeypatch.setattr(trace,'datetime',Clock)
+    scenarios,execution,_=baseline_input
+    real=module.SuiteRunner.run;calls=[]
+    def execute(self,*args,**kwargs):
+        result=real(self,*args,**kwargs);calls.append(result);return result
+    monkeypatch.setattr(module.SuiteRunner,'run',execute)
+    batch=module.RepeatRunner().run(scenarios,execution.snapshot,base_dir=scenarios.path.parent,count=3,allow_external=True)
+    assert len(calls)==3 and all(run.passed for run in calls)
+    assert len({digest(row['execution']) for row in batch.attempts})==1
+    assert len({row['receipt']['collection_id'] for row in batch.attempts})==3
+    assert module.compare_repeats(batch,batch).passed
 
 def test_failure_then_success_is_not_cherry_picked_away(baseline_input):
     from agentguard.regression.repeats import compare_repeats,RepeatBatch
@@ -29,6 +49,8 @@ def test_failure_then_success_is_not_cherry_picked_away(baseline_input):
     execution=data['attempts'][0]['execution'];run=execution['cases'][0]['result']
     run['status']='failed';run['passed']=False;run['assertions'][0]['passed']=False
     execution['passed']=False;execution['gate_decision']='BLOCK'
+    from agentguard.core.manifest import digest
+    data['attempts'][0]['receipt']['execution_digest']=digest(execution)
     candidate=RepeatBatch.model_validate(data)
     result=compare_repeats(baseline,candidate)
     assert not result.passed and result.cases[0]['candidate_pass_rate']==pytest.approx(2/3)
@@ -37,9 +59,17 @@ def test_failure_then_success_is_not_cherry_picked_away(baseline_input):
 def test_duplicate_evidence_is_not_three_independent_samples(baseline_input):
     from agentguard.regression.repeats import RepeatBatch
     baseline,_=batches(baseline_input,count=1)
-    raw=baseline.model_dump(mode='json');raw.pop('fingerprint');raw['expected_attempts']=2
+    raw=baseline.model_dump(mode='json');raw.pop('fingerprint');raw['expected_attempts']=2;raw['planned_attempts']=2
     raw['attempts'].append({'index':2,'execution':raw['attempts'][0]['execution']})
     with pytest.raises(ValueError):RepeatBatch.model_validate(raw)
+    copied=baseline.model_dump(mode='json');copied.pop('fingerprint');copied['expected_attempts']=2;copied['planned_attempts']=2
+    copied['attempts'].append({**copied['attempts'][0],'index':2})
+    with pytest.raises(ValueError):RepeatBatch.model_validate(copied)
+    bad=baseline.model_dump(mode='json');bad.pop('fingerprint')
+    bad['attempts'][0]['receipt']['execution_digest']='0'*64
+    with pytest.raises(ValueError):RepeatBatch.model_validate(bad)
+    legacy=baseline.model_dump(mode='json');legacy.pop('fingerprint');legacy['attempts'][0].pop('receipt')
+    assert RepeatBatch.model_validate(legacy).expected_attempts==1
 
 def test_stochastic_small_sample_is_inconclusive_not_statistical_pass(baseline_input):
     from agentguard.regression.repeats import compare_repeats

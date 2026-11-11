@@ -1,9 +1,10 @@
 # Phase 6: regression ve CI
 
-**Güncel durum (12 Kasım 2026): AG-060–064 belgelenen destek profilleriyle
-tamamlandı.** Son kodun 666 testi, temiz wheel kurulumu ve 13/13 CI işi başarılı;
-11 CI artefaktının içeriği doğrulandı. Ara testler ve bekleme notları tarihsel
-kayıttır; güncel kapanış kanıtı sondadır. Phase 7 başlatılmadı.
+**Güncel durum (12 Kasım 2026): son CI regresyonunun kapanış kontrolü sürüyor.**
+Önceki source commit'inin 666 testi ve 13/13 CI işi doğrulandı. Belge kapanışının
+CI tekrarında Windows/Python 3.10 bir collection identity hatasını ortaya çıkardı;
+son düzeltme yeniden doğrulanmadan Phase 6 kapatılmaz. Ayrıntı sondadır.
+Phase 7 başlatılmadı.
 
 Başlangıç: aynı checkout, `codex/development`, doğrulanmış Phase 5 HEAD
 `64dce93c7f841c31010f143bf97c6dd105084e74`. Phase 0–5'in 631 testi korunur.
@@ -103,8 +104,12 @@ Bu kayıt ilk AG-060 kilometre taşına aittir; sonraki uygulama aşağıdadır.
 
 `regression/repeats.py` mevcut SuiteRunner ile her attempt için yeni environment/worker
 oluşturur. RepeatBatch bütün sıralı attempt'leri, frozen snapshot, policy ve profile
-kimliğini mühürler. Kopyalanmış execution veya tekrar kullanılan controlled run ID
-bağımsız örnek sayılmaz. Paired comparison, pass rate, flaky işareti ve Wilson %95
+kimliğini mühürler. Collector her execution öncesi benzersiz collection ID oluşturur;
+receipt execution hash'ine bağlıdır. Aynı receipt veya controlled run ID yeniden
+kullanılamaz; receipt içermeyen legacy kayıtta aynı execution hash'i reddedilir.
+Farklı gerçek collection'lar aynı davranış/timestamp içeriğini üretebilir. Receipt
+yerel collector kaydıdır; imza, bağımsızlığın matematiksel kanıtı veya remote servis
+attestation'ı değildir. Paired comparison, pass rate, flaky işareti ve Wilson %95
 aralıkları raporlanır. Bu aralıklar bağımsız Bernoulli gözlemleri varsayar; seed veya
 küçük örnek sayısı genel doğruluk garantisi değildir. Stochastic modda asgari örnek
 sayısı 3–20 arasında açık politikadır; yetersizlik INCONCLUSIVE/BLOCK üretir.
@@ -245,7 +250,7 @@ excluded case varsa `authorizes_release=false` verir; seçilen scope'un ALLOW/BL
 kararı değişmez. Tam release scope'u bütün üyeleri zorunlu tutmaya devam eder.
 Bu son ayrım için 666 case'lik tam suite, temiz wheel ve CI kontrolü bekleniyor.
 
-## Doğrulanmış Phase 6 kapanışı
+## İlk doğrulanmış source kaydı (tarihsel)
 
 Uygulama kaynağı `032e6d7e9b9a0961597de23e4f11a8ecbf7aa19b`, aynı checkout ve
 `codex/development` dalı. Son yerel suite **666/666 başarılı**: 382 unit,
@@ -296,3 +301,28 @@ ve offline environment/replay profilidir; canlı HTTP/container/model yeniden
 development dalında doğrulanmıştır; main'e merge edilmediği için default branch'te
 otomatik schedule deploy edildiği iddia edilmez. Phase 7 kullanıcı onayı olmadan
 başlatılmaz.
+
+## Son CI'da bulunan collection identity hatası
+
+Belge-only `2a9d23a6a8c952e5ec8add3f660e78ee50463817` commit'inin
+[CI 43118823843](https://github.com/EgeBasturmen/agentguard/actions/runs/43118823843)
+Windows/Python 3.10 integration adımında
+`test_repeated_baseline_freezes_all_attempts_and_policy` başarısız oldu; zorunlu
+gate de bunu doğru şekilde blokladı. Diğer matrix/Docker job'ları başarılıydı.
+Başarısız JUnit indirildi; gerçek farklı HTTP attempt'lerinin aynı execution
+digest'ini üretmesi, içerik hash'inin tek başına collection kimliği olamayacağını
+gösterdi. Düşük çözünürlüklü saat durumu gerçek HTTP fixture'ında sabit datetime
+ile deterministik RED olarak yeniden üretildi; test retry/uyku/skip ile gizlenmedi.
+
+RepeatRunner artık execution öncesi unique collection ID üretir ve dönüşte typed,
+sürümlü receipt'i execution digest'ine bağlar. RepeatBatch duplicate receipt ID,
+receipt/digest çelişkisi ve controlled run ID reuse'u reddeder. Legacy kayıtlar
+geçerliliğini korur; aynı legacy içerik farklı attempt diye kabul edilmez. Hash ve
+ID'ler güvenilen yerel collector sınırındadır; kötü niyetli operatöre karşı imza
+garantisi iddia edilmez. Receipt oracle/RunResult/Phase 0–5 hash'lerini değiştirmez.
+
+Yeni test üç gerçek ayrı SuiteRunner/HTTP execution'ını aynı timestamp altında
+başarılı kaydeder; duplicate receipt ve yanlış digest ayrı kontrollerle reddedilir.
+Önceki negatif fixture'lar yalnız kendi bilinçli değiştirdikleri evidence'in receipt
+hash'ini yeniden bağlar; davranış/policy/cleanup gate'i gevşetilmez. Hedefli 29 test
+geçti; son 667 case, temiz wheel ve GitHub CI kontrolü sürüyor.

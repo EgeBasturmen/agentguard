@@ -22,6 +22,8 @@ def test_product_report_surfaces_have_same_gate_without_raw_evidence(tmp_path,ba
     raw=new.model_dump(mode='json');raw.pop('fingerprint')
     execution=raw['attempts'][0]['execution'];execution['cases'][0]['result']['cleanup_status']='unverified'
     execution['passed']=False;execution['gate_decision']='BLOCK'
+    from agentguard.core.manifest import digest
+    raw['attempts'][0]['receipt']['execution_digest']=digest(execution)
     result=compare_repeats(old,RepeatBatch.model_validate(raw))
     summary=export_reports(result,tmp_path/'report')
     assert summary['gate_decision']=='BLOCK'
