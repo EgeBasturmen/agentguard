@@ -45,7 +45,7 @@ def verify(candidate,output,profile='pr'):
         options=dict(baseline_repository=baselines,baseline_name='ci',scenario_repository=scenarios)
         current=export_reports(GateAPI.evaluate(new,**options),output/'current')
         negative=export_reports(GateAPI.evaluate(bad,**options),output/'known-bad')
-        if not current['authorizes_release'] or current['exit_code']!=0 or negative['exit_code']!=1:raise RuntimeError('Gate authority/exit-code parity failed')
+        if current['authorizes_release']!=(not selection.excluded_cases) or current['exit_code']!=0 or negative['exit_code']!=1:raise RuntimeError('Gate authority/exit-code parity failed')
         if negative['passed'] or 'blocking_comparison' not in negative['reasons']:raise RuntimeError('Known source regression was not blocked')
         result=dict(schema_version=1,profile=profile,current_gate=current['gate_decision'],known_bad_gate=negative['gate_decision'],
             selected_cases=len(selection.snapshot.cases),excluded_cases=len(selection.excluded_cases),independent_samples=count,

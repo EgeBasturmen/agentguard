@@ -178,8 +178,10 @@ exit 1 doğrulanmış evidence içinde bloklayan sonuç (davranış/altyapı/cov
 exit 2 geçersiz/uyumsuz evidence veya operasyon hatasıdır. Outcome ayrıca
 PASS/FAIL/ERROR/INCONCLUSIVE ayrımını taşır; hiçbir ERROR başarı sayılmaz.
 Standalone run/compare teşhisi aktif baseline release onayı vermez;
-`authorizes_release=true` yalnız güncel aktif baseline ile geçen repeat gate'inde
-verilir. Legacy CLI/rapor sözleşmeleri korunur; public SDK yeni API'yi export eder.
+`authorizes_release=true` yalnız güncel aktif baseline ile geçen ve parent
+snapshot'tan hiçbir case çıkarmayan repeat gate'inde verilir. Daraltılmış PR
+scope'u ALLOW olsa bile tam release onayı vermez. Legacy CLI/rapor sözleşmeleri
+korunur; public SDK yeni API'yi export eder.
 
 Gerçek Docker profil koşusunda Windows geçici dizin cleanup hatası, SQLite
 context manager'ın connection'ı kapatmamasını ortaya çıkardı. Önce tracking-connection
@@ -230,3 +232,10 @@ Son preflight incelemesinde bilinmeyen critical/quarantine case ID'sinin ancak
 attempt'ten sonra reddedildiği görüldü. Önce execution counter ile RED üretildi;
 policy scope artık herhangi bir agent execution'ından önce doğrulanır. Hedefli
 21 test geçti; 665 case'lik son tam koşu ve yeni source CI doğrulaması sürüyor.
+
+Preflight düzeltmesinden sonra 665/665 test ve temiz wheel geçti. Son scope
+kontrolü, daraltılmış PR ALLOW'unun tam release approval sayılmaması gerektiğini
+gerçek HTTP entegrasyon ve Docker PR kontrolünde önce RED üretti. Gate artık
+excluded case varsa `authorizes_release=false` verir; seçilen scope'un ALLOW/BLOCK
+kararı değişmez. Tam release scope'u bütün üyeleri zorunlu tutmaya devam eder.
+Bu son ayrım için 666 case'lik tam suite, temiz wheel ve CI kontrolü bekleniyor.

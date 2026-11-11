@@ -1,5 +1,33 @@
 import pytest
 
+@pytest.mark.integration
+def test_partial_pr_allow_cannot_authorize_full_release(tmp_path):
+    from phase3_service import Service
+    from test_generated_execution import http_request
+    from test_scenario_repository import approved
+    from agentguard.generation.generator import generate
+    from agentguard.generation.repository import ScenarioRepository
+    from agentguard.regression.repeats import RepeatRunner,RepeatPolicy
+    from agentguard.regression.profiles import SuiteProfile,select_profile
+    from agentguard.regression.baseline import BaselineRepository,checked_execution
+    from agentguard.regression.gate import GateAPI
+    with Service() as service:
+        scenarios=ScenarioRepository(tmp_path/'scenarios.sqlite')
+        cases=generate(http_request(service)).cases[:2]
+        for case in cases:approved(scenarios,case)
+        parent=scenarios.freeze('full',[(c.id,c.revision) for c in cases])
+        selection=select_profile(scenarios,parent,SuiteProfile(name='pr',case_ids=[cases[0].id]),RepeatPolicy(critical_cases=[cases[0].id]))
+        def run():return RepeatRunner().run(scenarios,selection.snapshot,base_dir=tmp_path,count=1,
+            policy=selection.execution_policy(),selection=selection,allow_external=True)
+        old=run();new=run();repo=BaselineRepository(tmp_path/'baselines.sqlite');pins={cases[0].id:'a'*64}
+        record=repo.create('pr',scenarios,checked_execution(old.attempts[0]['execution']),artifacts=pins,
+            actor='operator',reason='Scoped baseline',repeat_evidence=old.model_dump(mode='json'))
+        repo.approve(record.fingerprint,scenarios=scenarios,actor='reviewer',reason='Reviewed scope')
+        repo.promote(record.fingerprint,scenarios=scenarios,actor='operator',reason='PR gate',expected_active=None)
+        result=GateAPI.evaluate(new,baseline_repository=repo,baseline_name='pr',scenario_repository=scenarios,candidate_artifacts=pins)
+        assert result.passed and result.excluded_from_profile
+        assert not result.authorizes_release
+
 def test_unverified_cleanup_is_infrastructure_error(make_run):
     from agentguard.regression.gate import GateAPI
     run=make_run().model_copy(update={'cleanup_status':'unverified'})

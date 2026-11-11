@@ -247,6 +247,8 @@ promote ve retire eder. `agentguard release repeat` bağımsız attempt'leri kor
 olarak verir. PR/scheduled/release kapsamları, kritik case'ler, bounded tolerans,
 Wilson belirsizlik aralıkları ve süreli quarantine desteklenir. Quarantine, eksik
 kanıt veya retry geçmişindeki hata gizlenerek PASS üretilemez.
+Daraltılmış PR scope'unda ALLOW tam release onayı değildir; hariç tutulan case varsa
+`authorizes_release=false` kalır.
 
 `agentguard release export-repro` varsayılan metadata export'u; açık veri izniyle
 local Python/offline replay ve `release reproduce` source hash kontrollü Docker

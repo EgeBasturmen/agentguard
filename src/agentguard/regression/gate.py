@@ -114,7 +114,7 @@ class GateAPI:
                     for member in checked_execution(attempt['execution']).cases:
                         result=member.result
                         if infrastructure_problem(result):error=True
-                return GateDecision(**fields,authorizes_release=authorized and raw['passed'],infrastructure_error=error)
+                return GateDecision(**fields,authorizes_release=authorized and raw['passed'] and not raw['excluded_from_profile'],infrastructure_error=error)
             raise ValueError('Unsupported evidence input')
         except Exception:
             return GateDecision(decision_status='unverified',reasons=['invalid_or_incompatible_evidence'])
