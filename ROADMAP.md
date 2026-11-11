@@ -226,19 +226,25 @@ Faz 3 — Genel connector ve environment sistemi [3–5 hafta]
 - AG-033: Filesystem, HTTP, doküman dataset environment’ları. **Tamamlandı (desteklenen profiller):** Gerçek attempt-owned filesystem, immutable doküman dataset ve namespace lifecycle protokollü gerçek HTTP staging observer.
 - AG-034: Fixture/reset/inspect/cleanup ve connector contract tests. **Tamamlandı (desteklenen profiller):** Public contract probe, bağımsız snapshot, doğrulanan fixture/reset/cleanup; MCP session cleanup belirsizliği dahil typed unverified/BLOCK.
 - AG-035: Capability-aware preflight ve raporda coverage gaps. **Tamamlandı (desteklenen profiller):** SDK ve CLI --preflight-only; missing capability/unknown effects/protocol/mode reddi; JSON/CLI/HTML coverage gaps ve typed fingerprint-bound integration evidence.
-**Phase 3 tamamlandı (10 Kasım 2026, belgelenen destek profilleri):** 497/497 yerel test (300 unit, 168 integration, 29 gerçek Docker), failure/error/skip yok. Phase 0–2'nin 448 testi korunur; 49 yeni Phase 3 case'i vardır. Nihai kaynak `0ce264784a97bf38d65d4068574b11720c713b5f` için [GitHub Actions 42897469627](https://github.com/EgeBasturmen/agentguard/actions/runs/42897469627) 13/13 başarılı: Linux/Windows × Python 3.10–3.14, ayrı gerçek Docker/temiz wheel entegrasyonu, lint ve zorunlu gate. 11 artifact, 21 JUnit ve 11 temiz wheel kaydı indirildi ve doğrulandı. Nested schema resource/dialect ve rapor şema doğrulaması dahil fail-closed sınırlar testlidir. Destek/kalan riskler ve dosya listesi `docs/phase3-verification.md` içinde. Phase 4 kullanıcı onayını bekler.
+**Phase 3 tamamlandı (10 Kasım 2026, belgelenen destek profilleri):** 497/497 yerel test (300 unit, 168 integration, 29 gerçek Docker), failure/error/skip yok. Phase 0–2'nin 448 testi korunur; 49 yeni Phase 3 case'i vardır. Nihai kaynak `0ce264784a97bf38d65d4068574b11720c713b5f` için [GitHub Actions 42897469627](https://github.com/EgeBasturmen/agentguard/actions/runs/42897469627) 13/13 başarılı: Linux/Windows × Python 3.10–3.14, ayrı gerçek Docker/temiz wheel entegrasyonu, lint ve zorunlu gate. 11 artifact, 21 JUnit ve 11 temiz wheel kaydı indirildi ve doğrulandı. Nested schema resource/dialect ve rapor şema doğrulaması dahil fail-closed sınırlar testlidir. Destek/kalan riskler ve dosya listesi `docs/phase3-verification.md` içinde. Phase 4 durumu aşağıda belgelenir.
 Kapı: Dış kullanıcının mevcut tool’u yeniden yazılmadan bağlanıyor; eksik gözlem PASS diye gösterilmiyor. Desteklenmeyen özel protokol için örnek adapter var.
 Faz 4 — Senaryo ve dataset ürünü [3–4 hafta]
-**Uygulama doğrulama aşamasında:** AG-040–045 kodu ve regression testleri aynı
-`codex/development` checkout'unda geliştirildi. Tamamlanma durumu tüm yerel,
-gerçek Docker, temiz wheel ve GitHub CI kanıtları toplandıktan sonra işaretlenecek.
-Kapsam ve sınırlamalar: `docs/phase4-verification.md`.
-- AG-040: Rule/task import, kaynak ve çelişki gösterimi.
-- AG-041: Capability/risk paketleri ve senaryo generator.
-- AG-042: Fixture/oracle validation, deduplication ve generation provenance.
-- AG-043: Review/approve/version/stale/retire lifecycle.
-- AG-044: CSV/JSON/YAML import-export, incident-to-test.
-- AG-045: Benign/adversarial/edge coverage matrisi.
+- AG-040: Rule/task import, kaynak ve çelişki gösterimi. **Tamamlandı (belgelenen profil):** Versioned task/rule import, kaynak ID/URI/hash ve bool/int dahil çelişki doğrulaması.
+- AG-041: Capability/risk paketleri ve senaryo generator. **Tamamlandı (belgelenen profil):** Python/HTTP/container ortak generation hattı; deterministic görev, instruction-override ve bounded schema-boundary paketleri; unsupported capability onaylanmaz.
+- AG-042: Fixture/oracle validation, deduplication ve generation provenance. **Tamamlandı (belgelenen profil):** Şema/fixture/scope/contract/capability doğrulama, exact-content dedup, generator/config/request/source hash ve gerekçe. Trace/schema çıktısından iş oracle'ı uydurulmaz; unresolved INCONCLUSIVE kalır.
+- AG-043: Review/approve/version/stale/retire lifecycle. **Tamamlandı (belgelenen profil):** Transactional yerel repository; immutable revision, ayrı review/approve, frozen suite/active üyelik, stale/retire. Validate readiness kontrolüdür. Onaysız/stale/eksik üye ve yürütme sırasında geri çekilen onay BLOCK üretir.
+- AG-044: CSV/JSON/YAML import-export, incident-to-test. **Tamamlandı (belgelenen profil):** Boyut sınırlı roundtrip, büyük CSV fixture regression'ı, import sonrası yeni draft revision ve yeniden review; gerçek typed rapordan incident taslağı. Dataset sürümü immutable case/suite hash'leriyle sabitlenir.
+- AG-045: Benign/adversarial/edge coverage matrisi. **Tamamlandı (belgelenen profil):** Proposed/approved/executed/passed ayrımı; assertion ve controller audit kanıtı, gerçek boundary argümanı; eksik matris alanları ve isteğe bağlı zorunlu coverage release gate.
+**Phase 4 tamamlandı (11 Kasım 2026, belgelenen destek profilleri):** Aynı
+`codex/development` checkout'unda 544/544 yerel test (316 unit, 194 integration,
+34 gerçek Docker); Phase 0–3'ün 497 testi korunur, 47 yeni case vardır.
+Son uygulama commit'i `a219a025327479fb495b497a125a0c341dd66919` için
+[GitHub Actions 42941097074](https://github.com/EgeBasturmen/agentguard/actions/runs/42941097074)
+13/13 başarılı: Linux/Windows × Python 3.10–3.14, Docker, workflow lint ve zorunlu gate.
+11 artifact, 21 JUnit ve 11 temiz wheel kaydı indirilip doğrulandı; failure/error/skip yok.
+Temiz wheel gerçek üretilmiş/onaylı senaryoyu container içinde yürüttü.
+Deterministic DSL, bounded risk paketleri, yerel güvenilen reviewer ve HTTP observed-only
+sınırları `docs/phase4-verification.md` içinde. Phase 5 kullanıcı onayını bekler.
 Kapı: Kullanıcı tek tek YAML yazmadan üç farklı agent türü için işe yarar taslak suite oluşturabiliyor; bilinmeyen iş kuralı uydurulmuyor.
 Faz 5 — Geniş evaluation ve gerçek model [3–5 hafta]
 - AG-050: Model gateway ve usage/budget; mock/live ayrımı.

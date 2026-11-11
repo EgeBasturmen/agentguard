@@ -95,8 +95,36 @@ audit'te tamamlanmadıysa, normal oracle geçse bile BLOCK olur.
 
 ## Doğrulama durumu
 
-Yerel test, temiz wheel ve GitHub CI sonuçları tamamlandığında bu bölüm gerçek
-kanıtlarla güncellenecektir. Bu aşamada Phase 4 tamamlandı olarak işaretlenmemiştir.
+**11 Kasım 2026: AG-040–045 yukarıdaki destek profilleriyle tamamlandı.**
+
+- Başlangıç Phase 3: `77e7f76f697bf4db473cb2c9f63e8a59236fa02f`.
+- Ana uygulama: `e126cdbcefa36a186892744ceab04b3dacd403dd`.
+- Son kaynak/CSV düzeltmesi: `a219a025327479fb495b497a125a0c341dd66919`.
+- Yerel: `python -m pytest -q` **544 passed**, 316 unit + 194 integration +
+  34 gerçek Docker; failure/error/skip yok. Önceki 497 case korunur, 47 yenidir.
+- `python -m build --outdir artifacts/phase4-dist`: izole sdist ve sdist'ten wheel.
+- `python scripts/check_wheel.py artifacts/phase4-dist --docker`: temiz,
+  development dependency içermeyen runtime; checkout dışında kurulu paket;
+  gerçek console CLI, üç format roundtrip, onaysız freeze reddi, explicit review/
+  approve/freeze, gerçek controlled generation execution ve typed coverage.
+  `phase4_lifecycle`, `phase4_generation`, `phase3_integration`,
+  `controlled_docker`, `runtime_only`, `outside_checkout`, `verdict_parity`: true.
+- [Nihai kaynak CI 42941097074](https://github.com/EgeBasturmen/agentguard/actions/runs/42941097074):
+  **13/13 başarılı**. Ubuntu 24.04 / Windows 2022 × Python 3.10–3.14 her birinde
+  316 unit + 194 integration ve temiz wheel; ayrı Docker job'ında 34 gerçek case
+  ve temiz wheel Docker/generation akışı. Lint ve zorunlu gate başarılı.
+  Tarihsel `Phase 1 gate` job adı korunur; job tüm mevcut test katmanlarını bekler.
+- 11 artifact ZIP indirilerek **21 JUnit, 11 wheel-check JSON** doğrulandı;
+  tüm sayılar eşleşir ve failure/error/skip sıfırdır. İlk uygulama CI'ı
+  [42940389757](https://github.com/EgeBasturmen/agentguard/actions/runs/42940389757)
+  da 13/13 başarılıydı; nihai sayılar son kaynak CI'ına aittir.
+- Örnek request ayrıca okundu/üretildi: üç eksende beş taslak, iki ready-for-review;
+  üç boundary taslağının belirsizliği otomatik onaya dönüştürülmez.
+- Özgün main HEAD, branch, index hash'i, git status, kullanıcı dosyaları ve checkout
+  altındaki mevcut rapor hash'leri başlangıç snapshot'ıyla eşleşir. Hassas dosya,
+  DB, test artefaktı veya private CI helper commit edilmez. Main'e merge yapılmaz.
+
+Phase 5 başlatılmadı; kullanıcı onayı beklenir.
 
 Yeni testler: `test_generation.py`, `test_scenario_repository.py`,
 `test_generated_execution.py`, `test_generated_docker.py`, `test_scenario_cli.py`.
@@ -105,9 +133,13 @@ düzeltilmiştir: bool/int conflict, geç retirement, boundary stimulus'un agent
 tarafından yok sayılması, onaysız plan preview ve değişen comparison context.
 Kontrat bool/int drift ve proposal materialization sınırı için de önce başarısız
 regression testi yazılmıştır.
+150 KB fixture'ın CSV export/import roundtrip hatası da önce başarısız testle
+kanıtlanmış, input byte limiti korunarak CSV alan sınırı düzeltilmiştir.
 
 Yeni modüller: `generation/models.py`, `generator.py`, `validation.py`,
 `repository.py`, `evidence.py`, `execution.py`, `coverage.py`, `io.py`, `cli.py`.
 Ortak entegrasyon/gate değişiklikleri: `integrations/plan.py`, `core/scenario.py`,
 `core/result.py`, `core/outcome.py`, `runner/runner.py`, `sdk.py`, `cli/main.py`.
 Paket/CI: `scripts/check_wheel.py`, `.github/workflows/ci.yml`, `tests/conftest.py`.
+Diğer dosyalar: `generation/__init__.py`, `examples/phase4_agent.py`,
+`examples/phase4_request.json`, `README.md`, `ROADMAP.md` ve bu doğrulama kaydı.
