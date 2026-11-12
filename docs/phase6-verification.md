@@ -1,10 +1,10 @@
 # Phase 6: regression ve CI
 
-**Güncel durum (12 Kasım 2026): son CI regresyonunun kapanış kontrolü sürüyor.**
-Önceki source commit'inin 666 testi ve 13/13 CI işi doğrulandı. Belge kapanışının
-CI tekrarında Windows/Python 3.10 bir collection identity hatasını ortaya çıkardı;
-son düzeltme yeniden doğrulanmadan Phase 6 kapatılmaz. Ayrıntı sondadır.
-Phase 7 başlatılmadı.
+**Güncel durum (12 Kasım 2026): AG-060–064 belgelenen destek profilleriyle
+tamamlandı.** CI'da bulunan collection identity hatası deterministik olarak yeniden
+üretilip düzeltildi. Son kodun 667 testi, temiz wheel ve 13/13 CI işi başarılı;
+11 CI artefaktının içeriği doğrulandı. Eski bekleme/başarısız koşu notları tarihsel
+kayıttır; son kapanış kanıtı aşağıdadır. Phase 7 başlatılmadı.
 
 Başlangıç: aynı checkout, `codex/development`, doğrulanmış Phase 5 HEAD
 `64dce93c7f841c31010f143bf97c6dd105084e74`. Phase 0–5'in 631 testi korunur.
@@ -326,3 +326,48 @@ başarılı kaydeder; duplicate receipt ve yanlış digest ayrı kontrollerle re
 Önceki negatif fixture'lar yalnız kendi bilinçli değiştirdikleri evidence'in receipt
 hash'ini yeniden bağlar; davranış/policy/cleanup gate'i gevşetilmez. Hedefli 29 test
 geçti; son 667 case, temiz wheel ve GitHub CI kontrolü sürüyor.
+
+## Son kapanış: collection receipt düzeltmesi dahil
+
+Doğrulanan uygulama commit'i **`80e48f1aaf66ab558476d6d4d81a6521a8e1bf07`**.
+Yerel tüm suite **667/667 başarılı**: 382 unit, 238 integration, 47 gerçek Docker;
+failure/error/skip yok, 291,51 saniye. JUnit:
+`artifacts/phase6-collection-receipt-tests.xml`. Önceki 631 case korunur; yeni test
+dağılımı AG-060 10, AG-061 12, AG-062 2, AG-063 7, AG-064 5; toplam 36.
+
+İzole sdist ve sdist'ten wheel başarılı; runtime-only, checkout dışı temiz kurulum
+`artifacts/phase6-collection-receipt-wheel.json` içinde passed. Önceki Phase 3–5,
+CLI/verdict parity, gerçek Docker worker ve Phase 6 baseline/regression flag'leri
+doğrulandı. Son scheduled ve release profilleri sırasıyla
+`artifacts/phase6-receipt-scheduled-profile` (2 × 3) ve
+`artifacts/phase6-receipt-release-profile` (2 × 5) içinde geçti. Üç profil de gerçek
+Docker'da mevcut source için ALLOW ve yanlış source için gerekçeli BLOCK üretir;
+dar PR scope'u tam release onayı vermez. Phase 6 ücretli model/API çağrısı yapmadı.
+
+[Source CI 43122617009](https://github.com/EgeBasturmen/agentguard/actions/runs/43122617009)
+**13/13 başarılı**, Windows/Python 3.10 dahil. Ubuntu/Windows × Python 3.10–3.14
+on job'ın her birinde 382 unit + 238 integration ve temiz wheel; Docker job'ında
+47 test, kurulu wheel ve ürün regression gate; workflow lint ve zorunlu gate başarılı.
+11 ZIP indirildi: 21 pytest JUnit ve 11 wheel JSON'unun sayıları, feature flag'leri,
+failure/error/skip=0 koşulları doğrulandı. Ürün JSON/HTML/JUnit ALLOW/BLOCK, exit
+code, regression nedeni ve kapsam/release yetkisi ayrıca karşılaştırıldı. Önceki
+başarısız CI kaydı saklandı; test gizleme, sleep veya otomatik geçene kadar retry yoktur.
+
+Bu son kapanış yalnız ROADMAP ve bu raporu günceller; uygulama kodu doğrulanan
+source commit'iyle aynıdır. `codex/development` ve aynı checkout korunur. Main,
+Phase 2 remote ref'leri, özgün index/HEAD/status, kullanıcı dosyaları ve rapor hash
+kontrolleri başarılı. Kullanıcı canlı sonuçları, .env/key, DB ve test/paket
+artefaktları commit dışındadır. Yukarıdaki destek sınırları geçerlidir; Phase 7
+onay olmadan başlatılmaz.
+
+Değişen 23 dosya:
+
+- Çekirdek bağlantılar: `src/agentguard/cli/main.py`, `src/agentguard/sdk.py`,
+  `src/agentguard/generation/repository.py`.
+- Regression: `src/agentguard/regression/baseline.py`, `cli.py`, `gate.py`,
+  `profiles.py`, `release_cli.py`, `repeats.py`, `repro.py`.
+- Testler: `tests/test_phase6_baseline.py`, `test_phase6_gate.py`,
+  `test_phase6_profiles.py`, `test_phase6_repeats.py`, `test_phase6_repro.py`.
+- CI/paket/örnek: `.github/workflows/ci.yml`, `MANIFEST.in`, `scripts/check_wheel.py`,
+  `scripts/check_phase6.py`, `examples/phase6_agent.py`.
+- Belgeler: `README.md`, `ROADMAP.md`, `docs/phase6-verification.md`.
