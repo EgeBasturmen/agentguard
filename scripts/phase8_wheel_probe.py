@@ -8,6 +8,8 @@ def verify(docker=False,browser=False):
     from agentguard.sdk import RecordEnvironment,ClockEnvironment,BrowserEnvironment,contract_test,TeamPlan,run_team,verify_team
     from agentguard.integrations.plan import IntegrationPlan,run_integration_plan
     from agentguard.core.outcome import effective_pass
+    from agentguard.contracts.compatibility import supported_matrix
+    assert {kind+'.fixture' for kind in ('browser','database','inbox','calendar','clock')} <= {row.adapter.id for row in supported_matrix() if row.implementation=='implemented'}
     fixtures=[('database',{'tables':{'items':{}}},'database.put',dict(table='items',id='r',value={'value':'done'}),'tables.items.r.value','done'),
         ('inbox',{'messages':{}},'inbox.put',dict(id='m',value={'body':'hello'}),'messages.m.body','hello'),
         ('calendar',{'events':{}},'calendar.put',dict(id='e',value={'start':1,'end':2}),'events.e.end',2),

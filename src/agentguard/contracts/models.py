@@ -19,7 +19,7 @@ CapabilityName = Literal[
 ]
 ExecutionMode = Literal["observed", "controlled"]
 ToolMode = Literal["simulator", "staging", "replay", "mock", "custom"]
-EnvironmentKind = Literal["filesystem", "http", "dataset", "database", "inbox", "browser", "message_bus", "custom"]
+EnvironmentKind = Literal["filesystem", "http", "dataset", "database", "inbox", "browser", "calendar", "clock", "message_bus", "custom"]
 
 
 class ContractModel(BaseModel):
