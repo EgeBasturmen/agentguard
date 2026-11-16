@@ -10,6 +10,7 @@ import sqlite3
 import threading
 import time
 import uuid
+from agentguard.management.locking import state_lock
 
 class AccessError(Exception):
     def __init__(self,code='FORBIDDEN',status=403):self.code=code;self.status=status;super().__init__(code)
@@ -46,13 +47,17 @@ CREATE TABLE IF NOT EXISTS commercial(id TEXT PRIMARY KEY,project TEXT,kind TEXT
 '''
 
 class Store:
-    def __init__(self,root,*,rate_limit=120,clock=None):
+    def __init__(self,root,*,rate_limit=120,clock=None,migrate_schema=True):
         self.root=Path(root).absolute()
         if self.root.is_symlink():raise AccessError('UNSAFE_STORAGE',400)
         self.root.mkdir(parents=True,exist_ok=True,mode=0o700)
         self.db_path=self.root/'control.sqlite'
         if self.db_path.is_symlink():raise AccessError('UNSAFE_STORAGE',400)
         self.clock=clock or time.time;self.rate_limit=rate_limit;self.lock=threading.RLock()
+        self.migrate_schema=migrate_schema
+        with state_lock(self.root):self._initialize()
+
+    def _initialize(self):
         self.key_path=self.root/'signing.key'
         if self.key_path.is_symlink():raise AccessError('UNSAFE_STORAGE',400)
         if not self.key_path.exists():
@@ -66,25 +71,55 @@ class Store:
             names={r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
             if names and 'control_meta' not in names:raise AccessError('WRONG_DATABASE',500)
             if names:
-                if [r[0] for r in db.execute('SELECT version FROM control_meta')]!=[1]:raise AccessError('UNSUPPORTED_DATABASE_VERSION',500)
+                if [r[0] for r in db.execute('SELECT version FROM control_meta')] not in ([1],[2]):raise AccessError('UNSUPPORTED_DATABASE_VERSION',500)
                 required={'projects':{'workspace','model_tokens','model_cost','model_pricing'},'jobs':{'started','reserved_model_tokens','reserved_model_cost','seal'},
                     'runners':{'issuer','hash','project'},'enrollments':{'issuer','expires','used'}}
                 for table,columns in required.items():
                     if table not in names or not columns<={r[1] for r in db.execute('PRAGMA table_info('+table+')')}:raise AccessError('UNSUPPORTED_DATABASE_SHAPE_NO_IMPLICIT_MIGRATION',500)
-            db.executescript(SCHEMA)
+            if not names:
+                for statement in SCHEMA.split(';'):
+                    if statement.strip():db.execute(statement)
             versions=db.execute('SELECT version FROM control_meta').fetchall()
+            initialize_journal=not names or [r[0] for r in versions]==[1]
             if not versions:db.execute('INSERT INTO control_meta VALUES(1)')
-            elif [r[0] for r in versions]!=[1]:raise AccessError('UNSUPPORTED_DATABASE_VERSION',500)
+            from agentguard.management.migrations import migrate
+            if not versions or [r[0] for r in versions]==[1]:
+                if not versions or self.migrate_schema:migrate(db)
+            else:
+                for table in ('schema_history','billing_reconciliation','quota_state','recovery_receipts','deletion_applied'):
+                    if table not in names:raise AccessError('UNSUPPORTED_DATABASE_SHAPE_NO_IMPLICIT_MIGRATION',500)
+            from agentguard.management.operations import journal
+            journal(self,initialize=initialize_journal)
         if os.name!='nt':os.chmod(self.db_path,0o600)
 
     @contextmanager
     def db(self):
-        connection=sqlite3.connect(self.db_path,timeout=15);connection.row_factory=sqlite3.Row
+        with state_lock(self.root):
+            connection=sqlite3.connect(self.db_path,timeout=15);connection.row_factory=sqlite3.Row
+            try:
+                connection.execute('PRAGMA secure_delete=ON')
+                with connection:
+                    connection.execute('BEGIN IMMEDIATE')
+                    if (self.root/'deletions.json').exists():
+                        from agentguard.management.operations import apply_deletions
+                        apply_deletions(self,connection)
+                    yield connection
+            finally:connection.close()
+
+    def consume_rate(self,key):
+        path=self.root/'abuse.sqlite'
+        if path.is_symlink():raise AccessError('UNSAFE_STORAGE',400)
+        connection=sqlite3.connect(path,timeout=5)
         try:
             with connection:
-                connection.execute('BEGIN IMMEDIATE')
-                yield connection
+                connection.execute('CREATE TABLE IF NOT EXISTS attempts(key TEXT,window INTEGER,count INTEGER,PRIMARY KEY(key,window))')
+                window=int(self.clock()//60);connection.execute('DELETE FROM attempts WHERE window<?',(window-1,))
+                connection.execute('INSERT INTO attempts VALUES(?,?,1) ON CONFLICT(key,window) DO UPDATE SET count=count+1',(key,window))
+                count=connection.execute('SELECT count FROM attempts WHERE key=? AND window=?',(key,window)).fetchone()[0]
+            if count>self.rate_limit:raise AccessError('RATE_LIMITED',429)
         finally:connection.close()
+
+    def scenario_repository_path(self,project):return self.root/(check_id(project)+'.scenarios.sqlite')
 
     def event(self,db,workspace,project,actor,action,obj):
         db.execute('INSERT INTO audit(workspace,project,actor,action,object,created) VALUES(?,?,?,?,?,?)',
@@ -92,4 +127,4 @@ class Store:
 
     def scenario_repository(self,project):
         from agentguard.generation.repository import ScenarioRepository
-        return ScenarioRepository(self.root/(check_id(project)+'.scenarios.sqlite'))
+        return ScenarioRepository(self.scenario_repository_path(project))

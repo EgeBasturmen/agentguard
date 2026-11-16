@@ -7,6 +7,8 @@ import re
 import tempfile
 import threading
 import time
+import os
+import socket
 
 from agentguard.execution.docker_runtime import DockerRuntime
 from agentguard.execution.errors import BuildTimeout, ExecutionCancelled, ExecutionTimeout
@@ -56,6 +58,12 @@ def command(args, deadline, cancel=None):
 
 
 class ControlledDockerRuntime(DockerRuntime):
+    def _docker_create_command(self,container_name,policy):
+        if not re.fullmatch('agentguard-run-[0-9a-f]{32}',container_name):raise ValueError('Controlled container requires a run identity')
+        args=super()._docker_create_command(container_name,policy)
+        args[2:2]=['--label','io.agentguard.run_id='+container_name.removeprefix('agentguard-run-'),
+            '--label','io.agentguard.owner_pid='+str(os.getpid()),'--label','io.agentguard.host='+socket.gethostname()]
+        return args
     def __init__(self):
         self.cleanup_status = "not_required"
         self.output = None

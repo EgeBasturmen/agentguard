@@ -8,6 +8,9 @@ include scripts/check_wheel.py
 include scripts/phase5_wheel_probe.py
 include scripts/phase7_wheel_probe.py
 include scripts/phase8_wheel_probe.py
+include scripts/phase9_wheel_probe.py
+include scripts/check_phase9_load.py
+recursive-include docs *.md
 include examples/phase8_agent.py
 include examples/phase8_clock.json
 include scripts/check_phase7_ui.py

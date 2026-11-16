@@ -12,6 +12,8 @@ class Queue:
     def enroll_runner(self,token,project,name):
         with self.db() as db:
             actor=self._auth(db,token,project,'project:admin')
+            db.execute('DELETE FROM enrollments WHERE expires<=?',(self.clock(),))
+            if db.execute('SELECT count(*) FROM enrollments WHERE project=? AND used=0 AND expires>?',(project,self.clock())).fetchone()[0]>=20:raise AccessError('ENROLLMENT_LIMIT',409)
             if db.execute('SELECT count(*) FROM runners WHERE project=? AND revoked=0',(project,)).fetchone()[0]>=10:raise AccessError('RUNNER_LIMIT',409)
             value='ag7e_'+secrets.token_urlsafe(32)
             db.execute('INSERT INTO enrollments VALUES(?,?,?,?,0,?)',(token_hash(value),project,label(name),self.clock()+600,actor['id']))
@@ -78,6 +80,8 @@ class Queue:
         request_hash=digest(dict(suite=suite,kind=kind,artifact_bytes=artifact_bytes))
         with self.lock,self.db() as db:
             actor=self._auth(db,token,project,'run:write');self._reconcile(db)
+            from agentguard.management.operations import quota_issues
+            if quota_issues(db,project):raise AccessError('QUOTA_LEDGER_UNVERIFIED',409)
             existing=db.execute('SELECT * FROM jobs WHERE project=? AND idempotency=?',(project,idempotency_key)).fetchone()
             if existing:
                 if existing['request_hash']!=request_hash:raise AccessError('IDEMPOTENCY_CONFLICT',409)

@@ -11,8 +11,10 @@ ROLES={'owner':SCOPES,'admin':SCOPES,
     'viewer':frozenset({'project:read','artifact:read'})}
 
 class Auth:
-    def _key(self,db,workspace,project,user,scopes,ttl):
+    def _key(self,db,workspace,project,user,scopes,ttl,replacing=None):
         if type(ttl) is not int or not 1<=ttl<=90*86400:raise AccessError('INVALID_KEY_TTL',400)
+        active=db.execute('SELECT project FROM keys WHERE workspace=? AND revoked=0 AND expires>? AND id!=?',(workspace,self.clock(),replacing or '')).fetchall()
+        if len(active)>=128 or project is not None and sum(row['project']==project for row in active)>=32:raise AccessError('KEY_LIMIT',409)
         value='ag7_'+secrets.token_urlsafe(32);key=identity()
         db.execute('INSERT INTO keys(id,hash,workspace,project,user,scopes,expires) VALUES(?,?,?,?,?,?,?)',
             (key,token_hash(value),workspace,project,user,encode(sorted(scopes)),self.clock()+ttl))
@@ -43,14 +45,11 @@ class Auth:
         if not isinstance(token,str) or not 10<=len(token)<=256:raise AccessError('UNAUTHENTICATED',401)
         hashed=token_hash(token);key=db.execute('SELECT * FROM keys WHERE hash=?',(hashed,)).fetchone()
         if key is None or not hmac.compare_digest(key['hash'],hashed) or key['revoked'] or key['expires']<=self.clock():raise AccessError('UNAUTHENTICATED',401)
+        self.consume_rate(key['id'])
+        self.consume_rate('principal:'+token_hash(key['workspace']+'\x00'+key['user']))
         if scope is not None and scope not in json.loads(key['scopes']):raise AccessError()
         role=self._current_role(db,key,project)
         if role not in ROLES or scope is not None and scope not in ROLES[role]:raise AccessError()
-        window=int(self.clock()//60)
-        db.execute('DELETE FROM rate_limits WHERE window<?',(window-1,))
-        row=db.execute('SELECT count FROM rate_limits WHERE key=? AND window=?',(key['id'],window)).fetchone()
-        if row and row['count']>=self.rate_limit:raise AccessError('RATE_LIMITED',429)
-        db.execute('INSERT INTO rate_limits VALUES(?,?,1) ON CONFLICT(key,window) DO UPDATE SET count=count+1',(key['id'],window))
         return dict(key,role=role)
 
     def bootstrap(self,user):
@@ -141,7 +140,7 @@ class Auth:
             actor=self._auth(db,token,scope=None)
             scopes=set(json.loads(actor['scopes']))&ROLES[actor['role']]
             if not scopes:raise AccessError()
-            result=self._key(db,actor['workspace'],actor['project'],actor['user'],scopes,int(min(30*86400,actor['expires']-self.clock())))
+            result=self._key(db,actor['workspace'],actor['project'],actor['user'],scopes,int(min(30*86400,actor['expires']-self.clock())),replacing=actor['id'])
             db.execute('UPDATE keys SET revoked=1 WHERE id=?',(actor['id'],))
             db.execute('UPDATE runners SET issuer=? WHERE issuer=?',(result['key_id'],actor['id']))
             self.event(db,actor['workspace'],actor['project'],actor['user'],'key.rotate',actor['id']);return result

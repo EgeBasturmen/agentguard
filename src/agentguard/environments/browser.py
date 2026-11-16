@@ -45,7 +45,7 @@ class BrowserEnvironment(FilesystemEnvironment):
         if self._process is None:
             config=self._path('config.json')
             descriptor=os.open(config,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
-            with os.fdopen(descriptor,'w',encoding='utf-8') as stream:json.dump(dict(key=secrets.token_urlsafe(32),fixture=fixture),stream)
+            with os.fdopen(descriptor,'w',encoding='utf-8') as stream:json.dump(dict(key=secrets.token_urlsafe(32),fixture=fixture,owner_pid=os.getpid(),namespace=self.namespace),stream)
             self._process=subprocess.Popen([sys.executable,'-m','agentguard.environments.browser_service',self.root],stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
             deadline=time.monotonic()+15
             while not self._path('ready.json').exists():

@@ -109,3 +109,50 @@ def model_budget(state:Path=typer.Option(...,'--state'),project:str=typer.Option
     input_rate:int=1000000,output_rate:int=10000000,pricing_version:str='operator-conservative-v1'):
     emit(attempt(lambda:ControlPlane(state).operator_model_budget(project,max_tokens=max_tokens,max_cost_micro_usd=max_cost_micro_usd,
         operator=getpass.getuser(),reason=reason,input_rate=input_rate,output_rate=output_rate,pricing_version=pricing_version)))
+
+@app.command('backup')
+def backup_state(state:Path=typer.Option(...,'--state'),output:Path=typer.Option(...,'--output')):
+    from agentguard.management.operations import backup
+    from agentguard.management.store import Store
+    def execute():
+        if not (state/'control.sqlite').is_file():raise ValueError('Existing state required')
+        return backup(Store(state,migrate_schema=False),output)
+    emit(attempt(execute))
+
+@app.command('restore')
+def restore_state(archive:Path,target:Path=typer.Option(...,'--target'),signing_key:Path=typer.Option(...,'--signing-key'),deletions:Path=typer.Option(...,'--deletions')):
+    from agentguard.management.operations import restore
+    emit(attempt(lambda:restore(archive,target,signing_key=signing_key,deletions=deletions)))
+
+@app.command('migrate')
+def migrate_state(state:Path=typer.Option(...,'--state')):
+    def execute():
+        service=ControlPlane(state)
+        with service.db() as db:return dict(schema_version=db.execute('SELECT version FROM control_meta').fetchone()[0],transactional=True)
+    emit(attempt(execute))
+
+@app.command('reconcile-billing')
+def reconcile_billing(state:Path=typer.Option(...,'--state'),project:str=typer.Option(...,'--project'),reference:str=typer.Option(...,'--reference'),paid:bool=typer.Option(...,'--paid/--unpaid')):
+    emit(attempt(lambda:ControlPlane(state).reconcile_billing(project,operator=getpass.getuser(),reference=reference,paid=paid)))
+
+@app.command('recover-job')
+def recover_job(state:Path=typer.Option(...,'--state'),job:str=typer.Option(...,'--job'),report:Path=typer.Option(...,'--report'),reason:str=typer.Option(...,'--reason')):
+    def execute():
+        from agentguard.integrations.http import _json
+        with report.open('rb') as stream:raw=stream.read(2*1024*1024+1)
+        if len(raw)>2*1024*1024:raise ValueError('Bounded private cache report required')
+        return ControlPlane(state).recover_job(job,_json(raw),operator=getpass.getuser(),reason=reason)
+    emit(attempt(execute))
+
+@app.command('reap-container')
+def reap_container(container_id:str=typer.Option(...,'--container-id'),run_id:str=typer.Option(...,'--run-id')):
+    from agentguard.execution.recovery import reap_container as reap
+    emit(attempt(lambda:reap(container_id,run_id)))
+
+@app.command('create-account')
+def create_account(state:Path=typer.Option(...,'--state'),owner_credential:Path=typer.Option(...,'--owner-credential'),user:str=typer.Option(...,'--user'),name:str=typer.Option(...,'--name'),credential_file:Path=typer.Option(...,'--credential-file')):
+    emit(attempt(lambda:private_file(credential_file,lambda:ControlPlane(state).create_workspace(credential(owner_credential),user,name))))
+
+@app.command('delete-account')
+def delete_account(state:Path=typer.Option(...,'--state'),credential_file:Path=typer.Option(...,'--credential-file'),confirmation:str=typer.Option(...,'--confirmation')):
+    emit(attempt(lambda:ControlPlane(state).delete_workspace(credential(credential_file),confirmation=confirmation)))

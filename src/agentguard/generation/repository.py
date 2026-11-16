@@ -35,6 +35,7 @@ class ScenarioRepository:
         with self._connect() as db:
             tables={row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
             if tables and 'agentguard_meta' not in tables:raise ValueError('Not an AgentGuard scenario database')
+            if tables and db.execute('SELECT version FROM agentguard_meta').fetchall()!=[(1,)]:raise ValueError('Unsupported repository schema')
             db.executescript("""CREATE TABLE IF NOT EXISTS agentguard_meta(version INTEGER NOT NULL);
                 CREATE TABLE IF NOT EXISTS sources(id TEXT PRIMARY KEY,payload TEXT NOT NULL,digest TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS cases(id TEXT NOT NULL,revision INTEGER NOT NULL,digest TEXT NOT NULL,payload TEXT NOT NULL,status TEXT NOT NULL,review TEXT,PRIMARY KEY(id,revision));

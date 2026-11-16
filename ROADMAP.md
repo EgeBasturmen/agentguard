@@ -311,16 +311,18 @@ Faz 8 — Browser, multi-agent ve uzun görev genişlemesi [4–8 hafta]
 - AG-084: Bu yüzeylere özgü security ve cancellation testleri. **TAMAMLANDI — her yeni yüzeyde regression/security/E2E; browser/clock canlı iptal-cleanup ve team forgery kontrolleri doğrulandı.**
 Kapı: Her yeni yetenek en az bir gerçek entegrasyonda contract/E2E testli; gözlenemeyen delayed effect açıkça kapsam dışında.
 
-Phase 8 kullanıcı onayıyla aynı checkout/dalda başlatıldı. Destek profilleri, bağımlılıklar, gerçek kanıtlar ve manuel entegrasyon sınırları: `docs/phase8-verification.md`. AG-075 **BLOCKED / PENDING EXTERNAL VALIDATION**; Phase 7 genel kapanışı açık kalır. Phase 9 başlatılmadı.
+Phase 8 kullanıcı onayıyla aynı checkout/dalda başlatıldı. Destek profilleri, bağımlılıklar, gerçek kanıtlar ve manuel entegrasyon sınırları: `docs/phase8-verification.md`. AG-075 **BLOCKED / PENDING EXTERNAL VALIDATION**; Phase 7 genel kapanışı açık kalır. Güncel Phase 9 durumu aşağıdadır.
 
-Phase 8 teknik kapanış kanıtı: kaynak `9c972c9139b757ccb80f910ce99fe2a9897f6ec3`; [CI 43943423855](https://github.com/EgeBasturmen/agentguard/actions/runs/43943423855) **13/13 başarılı**, 383 unit + 303 integration + 68 gerçek Docker = **754 test**, failure/error/skip=0. Mevcut 716 test ve önceki gate/UI davranışı korundu. On bir artifact ZIP / 21 JUnit / 11 temiz wheel sonucu indirildi; Docker wheel'de gerçek Chromium/team ve eski execution/gateway/session profilleri doğrulandı. Ücretli API çağrısı veya dış pilot kanıtı yok. Otomatik framework keşfi/zero-config entegrasyon tamamlandı sayılmaz. Phase 9 için kullanıcı onayı beklenir.
+Phase 8 teknik kapanış kanıtı: kaynak `9c972c9139b757ccb80f910ce99fe2a9897f6ec3`; [CI 43943423855](https://github.com/EgeBasturmen/agentguard/actions/runs/43943423855) **13/13 başarılı**, 383 unit + 303 integration + 68 gerçek Docker = **754 test**, failure/error/skip=0. Mevcut 716 test ve önceki gate/UI davranışı korundu. On bir artifact ZIP / 21 JUnit / 11 temiz wheel sonucu indirildi; Docker wheel'de gerçek Chromium/team ve eski execution/gateway/session profilleri doğrulandı. Ücretli API çağrısı veya dış pilot kanıtı yok. Otomatik framework keşfi/zero-config entegrasyon tamamlandı sayılmaz. Kullanıcı onayıyla Phase 9 başlatıldı; güncel durum aşağıdadır.
 Faz 9 — Genel kullanıma açılış ve operasyon [3–5 hafta]
-- AG-090: Yük, soak, queue duplication, crash/restart ve cleanup testleri.
-- AG-091: Backup restore, schema migration, retention/delete doğrulaması.
-- AG-092: Billing reconciliation, cancellation, recovery ve plan limits.
-- AG-093: Security review, abuse limits, incident runbook ve support docs.
-- AG-094: Onboarding funnel, status/error iletişimi ve release docs.
+- AG-090: Yük, soak, queue duplication, crash/restart ve cleanup testleri. **Uygulandı; son 792 test / 30 dk yerel controller soak / wheel / CI kabulü sürüyor.**
+- AG-091: Backup restore, schema migration, retention/delete doğrulaması. **Uygulandı; son kabul sürüyor.** Transactional v1→v2, ayrı key/journal ile imzalı backup/new-target restore, primary proje/workspace silme; harici cache/backup/image erase ayrıca operatör sorumluluğu.
+- AG-092: Billing reconciliation, cancellation, recovery ve plan limits. **Uygulandı; son kabul sürüyor.** Manuel harici payment-reference/status profili; bağımsız finansal doğrulama veya otomatik tahsilat değil. Unknown kullanım rezervi sıfırlanmaz.
+- AG-093: Security review, abuse limits, incident runbook ve support docs. **Uygulandı; son kabul sürüyor.** Threat model, failed-op/principal rate, TLS/parent-death ve exact resource recovery testleri; bağımsız pentest iddiası yok.
+- AG-094: Onboarding funnel, status/error iletişimi ve release docs. **Uygulandı; son kabul sürüyor.** Operator-assisted account → connect/test/report → manual plan/cancel → primary workspace erase UI/API/CLI; public signup veya zero-config framework keşfi değil.
 Kapı: Hesap oluşturma → bağlama → test → ödeme/iptal → veri silme yolculuğu tamam. Operasyon hataları müşteri verisini veya verdict’i bozmaz.
+
+Phase 9 teknik hedefi tek aktif controller/private runner profilidir; public GA, hostile multi-tenancy veya gerçek dış ekip başarı kanıtı değildir. Doğrulama: `docs/phase9-verification.md`; runbook: `docs/operations-runbook.md`; threat model: `docs/security-threat-model.md`; release/support: `docs/phase9-release.md`. AG-075 **BLOCKED / PENDING EXTERNAL VALIDATION**; Phase 7 genel kapısı açık. Phase 10 başlatılmadı.
 Faz 10 — Managed execution / enterprise [ayrı plan]
 - AG-100: Managed build/worker pools ve güçlü tenant isolation.
 - AG-101: Dedicated/private deployment, SSO ve ileri audit gereksinimleri.

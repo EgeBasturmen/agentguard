@@ -15,6 +15,8 @@ CSP="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'
 
 def dispatch(service,method,path,token,data,query):
     parts=path.strip('/').split('/')
+    if method=='GET' and path=='/api/account':return service.account_info(token)
+    if method=='POST' and path=='/api/account/delete':return service.delete_workspace(token,**data)
     if method=='POST' and path=='/api/runner/exchange':return service.exchange_enrollment(**data)
     if method=='POST' and path=='/api/runner/claim':
         if data:raise AccessError('UNKNOWN_FIELDS',400)
@@ -38,6 +40,8 @@ def dispatch(service,method,path,token,data,query):
         if tail==['pilot']:return service.pilot_readiness(token,project)
         if tail==['audit']:return service.audit_log(token,project,after=int(query.get('after',['0'])[0]),limit=limit)
         if tail==['runners']:return service.runners(token,project)
+        if tail==['operations']:return service.operations_health(token,project)
+        if tail==['onboarding']:return service.onboarding_funnel(token,project)
         if tail[0]=='cases' and len(tail)==2:return service.case(token,project,tail[1])
         if tail[0]=='suites' and len(tail)==2:return service.suite_spec(token,project,tail[1])
         if tail[0]=='runs' and len(tail)==2:return service.job(token,project,tail[1])
@@ -49,6 +53,7 @@ def dispatch(service,method,path,token,data,query):
             'generate':service.generate_cases,'suites':service.freeze_suite,'runs':service.enqueue,
             'data-policy':service.set_data_policy,'plans':service.request_plan,'feedback':service.feedback,
             'runner-enrollment':service.enroll_runner,'compare':service.compare_reports}
+        actions['delete']=service.delete_project
         if len(tail)==1 and tail[0] in actions:return actions[tail[0]](token,project,**data)
         if tail==['cancellation']:
             if data:raise AccessError('UNKNOWN_FIELDS',400)
@@ -165,7 +170,7 @@ def make_server(service,host='127.0.0.1',port=0,*,tls_context=None,public_origin
         do_GET=execute;do_POST=execute
     server=PilotServer((host,port),Handler)
     server.service=service
-    if tls_context is not None:server.socket=tls_context.wrap_socket(server.socket,server_side=True)
+    if tls_context is not None:server.socket=tls_context.wrap_socket(server.socket,server_side=True,do_handshake_on_connect=False)
     return server
 
 @contextmanager

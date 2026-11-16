@@ -114,6 +114,10 @@ jobs:
         run: python -m pytest -q -m docker --junitxml=artifacts/docker.xml
       - name: Real browser connect, review, Docker run, report and session-isolation checks (no paid APIs)
         run: python scripts/check_phase7_ui.py --output artifacts/phase7-ui.json
+      - name: Operator-assisted payment, cancellation and primary-data deletion browser journey (no real payment)
+        run: python scripts/check_phase7_ui.py --operations --output artifacts/phase9-ui.json
+      - name: Bounded real HTTP queue load and soak (no agent or external service invocation)
+        run: python scripts/check_phase9_load.py --iterations 40 --pause-seconds 1 --output artifacts/phase9-load.json
       - name: Verify execution, gateway, evaluations, sessions and generation from a clean wheel (no paid APIs)
         run: |
           python -m build --outdir artifacts/dist

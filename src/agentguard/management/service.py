@@ -5,6 +5,7 @@ from agentguard.management.objects import Objects
 from agentguard.management.queue import Queue
 from agentguard.management.results import Results
 from agentguard.management.pilot import Pilot
+from agentguard.management.operations import Operations
 
-class ControlPlane(Pilot,Results,Queue,Objects,Auth,Store):
+class ControlPlane(Operations,Pilot,Results,Queue,Objects,Auth,Store):
     pass

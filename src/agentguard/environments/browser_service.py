@@ -6,12 +6,16 @@ from http.server import HTTPServer,BaseHTTPRequestHandler
 import json
 from pathlib import Path
 import sys
+import socket
+import threading
+from agentguard.execution.owner_watch import OwnerWatch
 from agentguard.environments.browser import fixture_check
 from agentguard.integrations.http import _json
 
 def serve(root):
     from playwright.sync_api import sync_playwright
     root=Path(root);config=json.loads((root/'config.json').read_text(encoding='utf-8'));state=copy.deepcopy(config['fixture'])
+    owner=OwnerWatch(config['owner_pid'])
     with sync_playwright() as driver:
         browser=driver.chromium.launch(headless=True)
         try:
@@ -33,7 +37,15 @@ def serve(root):
             render()
             class Handler(BaseHTTPRequestHandler):
                 def log_message(self,*args):pass
-                def setup(self):super().setup();self.connection.settimeout(2)
+                def setup(self):
+                    super().setup();self.connection.settimeout(2)
+                    def expire():
+                        try:self.connection.shutdown(socket.SHUT_RDWR)
+                        except OSError:pass
+                    self.deadline=threading.Timer(4,expire);self.deadline.daemon=True;self.deadline.start()
+                def finish(self):
+                    try:super().finish()
+                    finally:self.deadline.cancel()
                 def do_POST(self):
                     status=200
                     try:
@@ -66,8 +78,13 @@ def serve(root):
             with HTTPServer(('127.0.0.1',0),Handler) as server:
                 server.timeout=1;server.finished=False
                 temporary=root/'ready-next.json';temporary.write_text(json.dumps(dict(port=server.server_port)),encoding='utf-8');temporary.replace(root/'ready.json')
-                while not server.finished:server.handle_request()
+                while not server.finished and owner.alive():server.handle_request()
             context.close()
-        finally:browser.close()
+        finally:
+            browser.close()
+            orphaned=not owner.alive();owner.close()
+            if orphaned:
+                from agentguard.environments.adapters import FilesystemEnvironment
+                FilesystemEnvironment(root=str(root),namespace=config['namespace']).cleanup()
 
 if __name__=='__main__':serve(sys.argv[1])

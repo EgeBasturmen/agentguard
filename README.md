@@ -277,3 +277,12 @@ sanal clock/job ve sıralı controlled Python team desteği mevcut broker/observ
 akışını kullanır. Pending delayed effect PASS üretmez. Native framework keşfi,
 genel dış-site browser otomasyonu veya gerçek mail/calendar teslimatı iddiası yoktur.
 [Kullanım, güven sınırları ve doğrulama](docs/phase8-verification.md).
+
+## Phase 9 operasyon
+
+Private-pilot state için process lock, transactional v1→v2 migration, imzalı SQLite
+backup/restore, deletion journal, billing/quota reconciliation ve incident recovery
+eklendi. Operatör destekli gerçek browser yolculuğu primary proje silmeye kadar uzanır.
+Ödeme kayıtları bağımsız finansal doğrulama değildir; backup encryption sağlamaz.
+[Kabul raporu](docs/phase9-verification.md), [operasyon runbook’u](docs/operations-runbook.md),
+[threat model](docs/security-threat-model.md), [release/support](docs/phase9-release.md).

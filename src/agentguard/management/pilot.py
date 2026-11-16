@@ -13,9 +13,12 @@ class Pilot:
             if record is None:raise AccessError('NOT_FOUND',404)
             plan=PLANS[record['plan']]
             if max_tokens>plan['model_tokens'] or max_cost_micro_usd>plan['model_cost']:raise AccessError('MODEL_BUDGET_EXCEEDS_PLAN',400)
-            db.execute('UPDATE projects SET model_tokens=?,model_cost=?,model_pricing=? WHERE id=?',
-                (max_tokens,max_cost_micro_usd,encode(dict(input_rate=input_rate,output_rate=output_rate,version=pricing_version)),project))
-            if max_tokens==0 or max_cost_micro_usd==0:db.execute("UPDATE jobs SET cancel=1 WHERE project=? AND reserved_model_tokens>0 AND state IN ('leased','running')",(project,))
+            pricing=encode(dict(input_rate=input_rate,output_rate=output_rate,version=pricing_version))
+            changed=max_tokens<record['model_tokens'] or max_cost_micro_usd<record['model_cost'] or pricing!=record['model_pricing']
+            db.execute('UPDATE projects SET model_tokens=?,model_cost=?,model_pricing=? WHERE id=?',(max_tokens,max_cost_micro_usd,pricing,project))
+            if changed:
+                db.execute("UPDATE jobs SET state='cancelled',cancel=1,cleanup='not_required',reserved_seconds=0,reserved_bytes=0,reserved_model_tokens=0,reserved_model_cost=0 WHERE project=? AND reserved_model_tokens>0 AND state='queued'",(project,))
+                db.execute("UPDATE jobs SET cancel=1 WHERE project=? AND reserved_model_tokens>0 AND state IN ('leased','running')",(project,))
             self.event(db,record['workspace'],project,operator,'operator.model_budget',token_hash(reason))
         return dict(configured=True,invoice_upper_bound_guaranteed=False,runner_opt_in_required=True)
 
@@ -39,9 +42,15 @@ class Pilot:
         # Deliberately no HTTP route. Operator must have local private storage access.
         operator=label(operator);reference=label(receipt_reference);reject_credentials(reference)
         with self.db() as db:
-            row=db.execute("SELECT * FROM commercial WHERE id=? AND kind='plan' AND status='pending_manual_payment'",(check_id(request_id),)).fetchone()
+            row=db.execute("SELECT * FROM commercial WHERE id=? AND kind='plan' AND status IN ('pending_manual_payment','operator_confirmed_manual')",(check_id(request_id),)).fetchone()
             if row is None:raise AccessError('INVALID_PLAN_REQUEST',409)
             payload=json.loads(row['payload']);plan=payload['plan']
+            for previous in db.execute("SELECT id,payload FROM commercial WHERE kind='plan' AND status='operator_confirmed_manual'"):
+                if previous['id']!=request_id and json.loads(previous['payload']).get('manual_receipt_reference_digest')==token_hash(reference):raise AccessError('PAYMENT_REFERENCE_ALREADY_USED',409)
+            if row['status']=='operator_confirmed_manual':
+                current=db.execute('SELECT plan FROM projects WHERE id=?',(row['project'],)).fetchone()[0]
+                if payload.get('manual_receipt_reference_digest')!=token_hash(reference) or current!=plan:raise AccessError('STALE_OR_CONTRADICTORY_PLAN_REQUEST',409)
+                return dict(activated=plan,payment_processed_by_agentguard=False)
             if plan not in PLANS:raise AccessError('UNKNOWN_PLAN',409)
             payload.update(manual_receipt_reference_digest=token_hash(reference),operator=operator,
                 payment_assurance='operator-recorded external payment; not independently verified by AgentGuard')
@@ -60,8 +69,9 @@ class Pilot:
     def operator_cancel_plan(self,request_id,*,operator,reason):
         operator=label(operator);reason=label(reason);reject_credentials(reason)
         with self.db() as db:
-            row=db.execute("SELECT * FROM commercial WHERE id=? AND kind='cancel' AND status='pending_operator_cancellation'",(check_id(request_id),)).fetchone()
+            row=db.execute("SELECT * FROM commercial WHERE id=? AND kind='cancel' AND status IN ('pending_operator_cancellation','operator_cancelled')",(check_id(request_id),)).fetchone()
             if row is None:raise AccessError('INVALID_CANCELLATION_REQUEST',409)
+            if row['status']=='operator_cancelled':return dict(cancelled=True,plan='developer',external_refund_not_automated=True)
             if db.execute("SELECT 1 FROM jobs WHERE project=? AND state IN ('queued','leased','running')",(row['project'],)).fetchone():raise AccessError('ACTIVE_RUNS_PREVENT_IMMEDIATE_DOWNGRADE',409)
             db.execute("UPDATE projects SET plan='developer' WHERE id=?",(row['project'],))
             payload=json.loads(row['payload']);payload.update(operator=operator,reason=reason)

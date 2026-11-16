@@ -246,6 +246,9 @@ print(json.dumps({"version": distribution.version, "python": sys.version.split()
         phase8_probe=work/'phase8_wheel_probe.py'
         phase8_probe.write_bytes(Path(__file__).with_name('phase8_wheel_probe.py').read_bytes())
         details.update(json.loads(run([python,'-I',phase8_probe]+(['--docker'] if docker else [])+(['--browser'] if browser else []))))
+        phase9_probe=work/'phase9_wheel_probe.py'
+        phase9_probe.write_bytes(Path(__file__).with_name('phase9_wheel_probe.py').read_bytes())
+        details.update(json.loads(run([python,'-I',phase9_probe]+(['--docker'] if docker else []))))
         details.update({"wheel": wheel.name, "runtime_only": True, "outside_checkout": True,
                         "console_cli": True, "verdict_parity": True, "status": "passed"})
         return details

@@ -11,7 +11,7 @@ from agentguard.management.runner import PrivateRunner
 from agentguard.management.client import Client
 from agentguard.execution.agent_spec import AgentLaunchSpec
 
-def verify(output):
+def verify(output,operations=False):
     output=Path(output)
     if output.exists() or output.is_symlink():raise FileExistsError('Verification output exists')
     output.parent.mkdir(parents=True,exist_ok=True)
@@ -73,6 +73,29 @@ def verify(output):
                 assert service.pilot_readiness(owner['token'],project)['external_pilot_verified'] is False
                 other=service.create_workspace(owner['token'],'second-technical-fixture','Second fixture')
                 service.create_project(other['token'],'Second fixture project')
+                # Hold a real private file read across credential replacement. An old
+                # action must not upload its evidence using the new session's key.
+                actual=next(row for row in service.jobs(owner['token'],project) if row['gate_decision']=='ALLOW')
+                private_report=root/'private-evidence'/project/(actual['id']+'.json')
+                page.locator('details').filter(has=page.locator('#compare')).locator('summary').click()
+                page.locator('#baseline-id').fill(actual['id']);page.locator('#candidate-id').fill(actual['id'])
+                page.locator('#baseline-file').set_input_files(private_report);page.locator('#candidate-file').set_input_files(private_report)
+                uploads=[]
+                def record_upload(route):uploads.append(True);route.continue_()
+                page.route('**/api/projects/*/compare',record_upload)
+                page.evaluate("""()=>{globalThis.originalPrivateRead=File.prototype.text;globalThis.delayPrivateRead=true;File.prototype.text=function(){if(!globalThis.delayPrivateRead)return globalThis.originalPrivateRead.call(this);globalThis.delayPrivateRead=false;return new Promise(resolve=>{globalThis.releasePrivateRead=()=>globalThis.originalPrivateRead.call(this).then(resolve);});};}""")
+                page.locator('#compare button').click()
+                for _ in range(40):
+                    if page.evaluate('Boolean(globalThis.releasePrivateRead)'):break
+                    page.wait_for_timeout(50)
+                assert page.evaluate('Boolean(globalThis.releasePrivateRead)')
+                page.locator('#token').fill(other['token']);page.locator('#login button').click()
+                expect(page.locator('#projects option')).to_have_text('Second fixture project')
+                page.evaluate('()=>{globalThis.releasePrivateRead();}');page.wait_for_timeout(500)
+                assert not uploads,'Private evidence was uploaded after credential replacement'
+                page.evaluate('()=>{File.prototype.text=globalThis.originalPrivateRead;}')
+                page.locator('#token').fill(owner['token']);page.locator('#login button').click()
+                expect(page.locator('#projects option')).to_have_text('Technical browser fixture')
                 held=[];delay=[True]
                 def delayed_runs(route):
                     if delay[0] and '/'+project+'/' in route.request.url:
@@ -93,17 +116,39 @@ def verify(output):
                 assert page.locator('#evidence').text_content()==''
                 assert page.locator('#enrollment').text_content()==''
                 assert not page_errors and not worker_errors
+                if operations:
+                    page.locator('#token').fill(owner['token']);page.locator('#login button').click()
+                    expect(page.locator('#projects option')).to_have_text('Technical browser fixture')
+                    expect(page.locator('#funnel')).to_contain_text('verified_current_runs')
+                    page.locator('#plan').click();expect(page.locator('#status')).to_contain_text('pending_manual_payment')
+                    with service.db() as db:request=db.execute("SELECT id FROM commercial WHERE project=? AND kind='plan' ORDER BY created DESC",(project,)).fetchone()[0]
+                    service.operator_activate_plan(request,operator='synthetic-technical-fixture',receipt_reference='synthetic-offline-reference-no-real-payment')
+                    service.reconcile_billing(project,operator='synthetic-technical-fixture',reference='synthetic-offline-reference-no-real-payment',paid=True)
+                    page.locator('#cancel-plan').click();expect(page.locator('#status')).to_contain_text('pending_operator_cancellation')
+                    with service.db() as db:request=db.execute("SELECT id FROM commercial WHERE project=? AND kind='cancel' ORDER BY created DESC",(project,)).fetchone()[0]
+                    service.operator_cancel_plan(request,operator='synthetic-technical-fixture',reason='Technical cancellation only')
+                    stop.set();worker.join(timeout=30);assert not worker.is_alive()
+                    page.locator('#operations-check').click();expect(page.locator('#operations')).to_contain_text('ready')
+                    page.locator('#delete-confirmation').fill('Technical browser fixture');page.locator('#delete-project button').click()
+                    expect(page.locator('#status')).to_contain_text('Proje primary verisi silindi')
+                    expect(page.locator('#projects option')).to_have_count(0)
+                    assert service.projects(owner['token'])==[] and not service.scenario_repository_path(project).exists()
+                    expect(page.locator('#account-info')).to_contain_text('Initial workspace')
+                    page.locator('#delete-account-confirmation').fill('Initial workspace');page.locator('#delete-account button').click()
+                    expect(page.locator('#status')).to_contain_text('Hesap/workspace primary verisi silindi')
+                    with service.db() as db:assert db.execute('SELECT 1 FROM workspace_members WHERE workspace=?',(owner['workspace'],)).fetchone() is None
                 page.locator('#logout').click();expect(page.locator('#projects option')).to_have_count(0)
             finally:
                 stop.set();worker.join(timeout=30);context.close();browser.close()
                 if worker.is_alive():raise RuntimeError('Private fixture runner did not stop')
         result=dict(status='passed',browser='chromium',real_http=True,real_docker=True,
             connect_generate_review_freeze_execute_report=True,unknown_oracle_not_approved=True,
-            xss_prevented=True,no_browser_credential_storage=True,cross_session_view_cleared=True,
+            xss_prevented=True,no_browser_credential_storage=True,cross_session_view_cleared=True,private_file_read_fenced=True,
             live_model_calls=0,external_pilot_verified=False)
+        if operations:result.update(phase9_journey=True,payment_profile='synthetic operator-recorded manual flow; no real payment',primary_deletion_verified=True,primary_account_deletion_verified=True)
         with output.open('x',encoding='utf-8') as stream:json.dump(result,stream,indent=2)
         return result
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--output',type=Path,required=True)
-    print(json.dumps(verify(parser.parse_args().output)))
+    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--output',type=Path,required=True);parser.add_argument('--operations',action='store_true')
+    args=parser.parse_args();print(json.dumps(verify(args.output,operations=args.operations)))
