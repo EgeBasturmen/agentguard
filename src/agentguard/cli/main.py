@@ -638,6 +638,8 @@ from agentguard.regression.cli import app as baseline_app
 app.add_typer(baseline_app,name="baseline")
 from agentguard.regression.release_cli import app as release_app
 app.add_typer(release_app,name="release")
+from agentguard.management.cli import app as management_app
+app.add_typer(management_app,name="management")
 
 if __name__ == "__main__":
     app()

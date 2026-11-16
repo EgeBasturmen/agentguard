@@ -92,7 +92,7 @@ jobs:
   docker:
     needs: workflow-lint
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
         with:
@@ -101,7 +101,9 @@ jobs:
         with:
           python-version: '3.11'
           cache: pip
-      - run: python -m pip install --upgrade pip ".[dev]"
+      - run: python -m pip install --upgrade pip ".[dev,ui]"
+      - name: Install Chromium for real private-pilot browser verification
+        run: python -m playwright install --with-deps chromium
       - name: Require working Docker daemon
         run: docker info
       - name: Build current worker and prepare timeout fixture image
@@ -110,6 +112,8 @@ jobs:
           docker pull python:3.11-slim
       - name: Real Docker agents, gateway, sessions, evaluations, approved scenarios and isolation tests (no skips)
         run: python -m pytest -q -m docker --junitxml=artifacts/docker.xml
+      - name: Real browser connect, review, Docker run, report and session-isolation checks (no paid APIs)
+        run: python scripts/check_phase7_ui.py --output artifacts/phase7-ui.json
       - name: Verify execution, gateway, evaluations, sessions and generation from a clean wheel (no paid APIs)
         run: |
           python -m build --outdir artifacts/dist

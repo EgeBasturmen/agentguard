@@ -292,13 +292,15 @@ ve ürün JSON/HTML/JUnit kararları indirip doğrulandı. Kaynak commit:
 Phase 7 kullanıcı onayı olmadan başlatılmaz.
 Kapı: Gerçek bir değişiklik CI’da nedenleriyle bloklanıyor; aynı veri bütün yüzeylerde aynı kararı üretiyor.
 Faz 7 — Web yönetimi ve private-runner pilot [4–6 hafta]
-- AG-070: Auth/workspace/project ve API scopes.
-- AG-071: Suite/rule review, run detail ve comparison UI.
-- AG-072: Durable queue/run orchestration; private runner enrollment/revoke.
-- AG-073: Tenant authorization, artifacts, retention/redaction.
-- AG-074: Usage/quotas, pilot payment/plan/support akışı.
-- AG-075: 3–5 dış ekiple onboarding ve gerçek bug doğrulaması.
+- AG-070: Auth/workspace/project ve API scopes. **Teknik uygulama/doğrulama sürüyor; henüz kapatılmadı.**
+- AG-071: Suite/rule review, run detail ve comparison UI. **Teknik uygulama/doğrulama sürüyor; henüz kapatılmadı.**
+- AG-072: Durable queue/run orchestration; private runner enrollment/revoke. **Teknik uygulama/doğrulama sürüyor; henüz kapatılmadı.**
+- AG-073: Tenant authorization, artifacts, retention/redaction. **Teknik uygulama/doğrulama sürüyor; henüz kapatılmadı.**
+- AG-074: Usage/quotas, pilot payment/plan/support akışı. **Teknik uygulama/doğrulama sürüyor; henüz kapatılmadı.**
+- AG-075: 3–5 dış ekiple onboarding ve gerçek bug doğrulaması. **BLOCKED / PENDING EXTERNAL VALIDATION:** Kullanıcı 16 Kasım 2026 tarihinde doğrulanmış bağımsız ekip/pilot kanıtı bulunmadığını bildirdi. Teknik fixture, demo ve feedback sayısı dış pilot başarısı sayılmaz. Onboarding/feedback/bug-retest mekanizması ve gerçek pilot test planı hazırlanır; gerçek ekip ve tekrar kullanım kabul kanıtı beklenir.
 Kapı: Kullanıcı dokümanla bağlanabiliyor, tekrar kullanıyor; veri erişimi ve quota server-side uygulanıyor. Teknik destekle yapılmış demo ile self-service başarı ayrı ölçülüyor.
+
+Phase 7 bütünü tamamlanmadı. Mevcut mimari karşılaştırması, güven sınırı ve “Agent’ını Bağla → Test Et → Rapor Al” akışındaki manuel adımlar: `docs/phase7-verification.md`. Dış pilot kabul planı: `docs/phase7-pilot-plan.md`.
 Faz 8 — Browser, multi-agent ve uzun görev genişlemesi [4–8 hafta]
 - AG-080: Browser lifecycle, test site fixtures ve authoritative action evidence.
 - AG-081: Database/inbox/calendar environment paketleri.

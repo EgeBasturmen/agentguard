@@ -28,7 +28,7 @@ def check_wheel(wheel: Path, wheelhouse: Path | None = None, *, docker: bool = F
     for source_archive in wheel.parent.glob("agentguard-*.tar.gz"):
         with tarfile.open(source_archive) as archive:
             names=archive.getnames()
-            for support in ("tests/conftest.py","tests/phase3_service.py","tests/phase5_service.py","scripts/check_gemini.py","scripts/check_phase6.py","examples/phase6_agent.py"):
+            for support in ("tests/conftest.py","tests/phase3_service.py","tests/phase5_service.py","scripts/check_gemini.py","scripts/check_phase6.py","examples/phase6_agent.py","scripts/phase7_wheel_probe.py","scripts/check_phase7_ui.py"):
                 assert any(name.endswith('/'+support) for name in names), f"sdist misses {support}"
     with tempfile.TemporaryDirectory(prefix="agentguard-wheel-") as directory:
         work = Path(directory).resolve()
@@ -83,7 +83,7 @@ modules = ["agentguard", "agentguard.cli.main", "agentguard.runner.runner",
 for name in modules:
     location = Path(importlib.import_module(name).__file__).resolve()
     assert location.is_relative_to(root), (name, location, root)
-for name in ("pytest", "pytest_asyncio", "build"):
+for name in ("pytest", "pytest_asyncio", "build", "playwright"):
     assert importlib.util.find_spec(name) is None, f"Development dependency leaked: {name}"
 for name in ("controlled_worker.py", "worker_client.py"):
     worker_source = importlib.resources.files("agentguard.execution").joinpath(name).read_text(encoding="utf-8")
@@ -239,6 +239,9 @@ print(json.dumps({"version": distribution.version, "python": sys.version.split()
         phase5_probe=work/'phase5_wheel_probe.py'
         phase5_probe.write_bytes(Path(__file__).with_name('phase5_wheel_probe.py').read_bytes())
         details.update(json.loads(run([python,'-I',phase5_probe,'--cli',cli]+(['--docker'] if docker else []))))
+        phase7_probe=work/'phase7_wheel_probe.py'
+        phase7_probe.write_bytes(Path(__file__).with_name('phase7_wheel_probe.py').read_bytes())
+        details.update(json.loads(run([python,'-I',phase7_probe]+(['--docker'] if docker else []))))
         details.update({"wheel": wheel.name, "runtime_only": True, "outside_checkout": True,
                         "console_cli": True, "verdict_parity": True, "status": "passed"})
         return details

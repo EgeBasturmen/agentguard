@@ -19,3 +19,6 @@ from agentguard.regression.repeats import RepeatRunner,RepeatPolicy,RepeatBatch,
 from agentguard.regression.profiles import SuiteProfile,select_profile,export_reports
 from agentguard.regression.repro import ExportPolicy,ReproBundle,make_bundle,reproduce
 from agentguard.regression.gate import GateAPI,GateDecision
+from agentguard.management.service import ControlPlane
+from agentguard.management.client import Client as ManagementClient
+from agentguard.management.runner import PrivateRunner

@@ -12,6 +12,8 @@ artifacts/
 # Secrets
 .env
 .env.*
+.agentguard/
+*.key
 
 # Generated reports
 reports/*

@@ -259,3 +259,13 @@ filtreleme garantisi verilmez. Yerel baseline audit'i SaaS kimlik/RBAC yerine ge
 gerçek Docker'da mevcut source'u ve bilerek hatalı varyantını frozen oracle altında
 kontrol eder; ücretli API çağırmaz. Çıktı dizinindeki mevcut raporları değiştirmez.
 [Kabul kriterleri, CLI/API sözleşmesi, kanıtlar ve sınırlar](docs/phase6-verification.md).
+
+## Phase 7 private-runner yönetimi
+
+Web arayüzü, proje/API scopes, insan onaylı suite, kalıcı run kuyruğu, müşterinin
+kendi runner’ı, redacted rapor ve quota/manuel pilot plan akışı mevcut çekirdeği kullanır.
+“Agent’ını Bağla → Test Et → Rapor Al” akışı açık runtime/tool eşlemesi, fixture,
+kurallar ve insan oracle onayı gerektirir; otomatik agent/framework keşfi yoktur.
+AG-075 gerçek dış ekip doğrulaması bekliyor; Phase 7 bütünü tamamlanmış değildir.
+[Kurulum](docs/phase7-onboarding.md), [teknik kanıt/sınırlar](docs/phase7-verification.md),
+[gerçek pilot planı](docs/phase7-pilot-plan.md).
