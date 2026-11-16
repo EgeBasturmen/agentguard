@@ -292,15 +292,17 @@ ve ürün JSON/HTML/JUnit kararları indirip doğrulandı. Kaynak commit:
 Phase 7 kullanıcı onayı olmadan başlatılmaz.
 Kapı: Gerçek bir değişiklik CI’da nedenleriyle bloklanıyor; aynı veri bütün yüzeylerde aynı kararı üretiyor.
 Faz 7 — Web yönetimi ve private-runner pilot [4–6 hafta]
-- AG-070: Auth/workspace/project ve API scopes. **Teknik uygulama/doğrulama sürüyor; henüz kapatılmadı.**
-- AG-071: Suite/rule review, run detail ve comparison UI. **Teknik uygulama/doğrulama sürüyor; henüz kapatılmadı.**
-- AG-072: Durable queue/run orchestration; private runner enrollment/revoke. **Teknik uygulama/doğrulama sürüyor; henüz kapatılmadı.**
-- AG-073: Tenant authorization, artifacts, retention/redaction. **Teknik uygulama/doğrulama sürüyor; henüz kapatılmadı.**
-- AG-074: Usage/quotas, pilot payment/plan/support akışı. **Teknik uygulama/doğrulama sürüyor; henüz kapatılmadı.**
+- AG-070: Auth/workspace/project ve API scopes. **TAMAMLANDI — private pilot API-key/rol/scope profili; operator-assisted provisioning/recovery.** Public signup/SSO iddiası yok.
+- AG-071: Suite/rule review, run detail ve comparison UI. **TAMAMLANDI — mevcut generation/review/GateAPI/comparator'a bağlı gerçek Chromium/HTTP/Docker akışı.** Comparison için private canonical evidence manuel yüklenir; otomatik agent keşfi yok.
+- AG-072: Durable queue/run orchestration; private runner enrollment/revoke. **TAMAMLANDI — single-controller SQLite, fenced lease/heartbeat, idempotency, cancellation ve one-use enrollment/revoke.** Unknown cleanup BLOCK; lost run otomatik redispatch edilmez.
+- AG-073: Tenant authorization, artifacts, retention/redaction. **TAMAMLANDI — server-side tenant/scope, authenticated grant, redacted primary artifact retention/delete ve integrity kontrolleri.** Genel DLP, tüm metadata/backup/account silme garantisi yok.
+- AG-074: Usage/quotas, pilot payment/plan/support akışı. **TAMAMLANDI — kalıcı server-side run/user/compute/logical-storage/model reservations; manuel harici fatura/plan/iptal ve support/bug-retest profili.** Otomatik tahsilat veya provider invoice doğruluğu iddiası yok.
 - AG-075: 3–5 dış ekiple onboarding ve gerçek bug doğrulaması. **BLOCKED / PENDING EXTERNAL VALIDATION:** Kullanıcı 16 Kasım 2026 tarihinde doğrulanmış bağımsız ekip/pilot kanıtı bulunmadığını bildirdi. Teknik fixture, demo ve feedback sayısı dış pilot başarısı sayılmaz. Onboarding/feedback/bug-retest mekanizması ve gerçek pilot test planı hazırlanır; gerçek ekip ve tekrar kullanım kabul kanıtı beklenir.
 Kapı: Kullanıcı dokümanla bağlanabiliyor, tekrar kullanıyor; veri erişimi ve quota server-side uygulanıyor. Teknik destekle yapılmış demo ile self-service başarı ayrı ölçülüyor.
 
 Phase 7 bütünü tamamlanmadı. Mevcut mimari karşılaştırması, güven sınırı ve “Agent’ını Bağla → Test Et → Rapor Al” akışındaki manuel adımlar: `docs/phase7-verification.md`. Dış pilot kabul planı: `docs/phase7-pilot-plan.md`.
+
+AG-070–074 teknik kabul kanıtı: kaynak `836a73db28d8b19e2ad04b841a5a56b1ef5f08b9`, yerel **716/716** (382 unit + 282 integration + 52 gerçek Docker), temiz runtime-only wheel ve gerçek Chromium başarılı. [CI 43812261593](https://github.com/EgeBasturmen/agentguard/actions/runs/43812261593) **13/13 başarılı**; 11 artifact/21 JUnit/11 wheel sonucu indirildi ve doğrulandı. Teknik fixture'lar dış pilot değildir; ücretli API çağrısı yapılmadı. AG-075 ve Phase 7 genel kapısı açık; Phase 8 başlatılmadı. Kurulum: `docs/phase7-onboarding.md`.
 Faz 8 — Browser, multi-agent ve uzun görev genişlemesi [4–8 hafta]
 - AG-080: Browser lifecycle, test site fixtures ve authoritative action evidence.
 - AG-081: Database/inbox/calendar environment paketleri.

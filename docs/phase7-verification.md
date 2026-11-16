@@ -1,6 +1,7 @@
 # Phase 7: yönetim, private runner ve pilot hazırlığı
 
-Güncel durum (16 Kasım 2026): AG-070–074 teknik uygulaması/doğrulaması sürüyor.
+Güncel durum (16 Kasım 2026): **AG-070–074 aşağıdaki teknik destek profilleriyle
+tamamlandı**; 716 test, gerçek Chromium, temiz wheel ve 13/13 CI işi doğrulandı.
 **AG-075 BLOCKED / PENDING EXTERNAL VALIDATION. Phase 7 bütünü tamamlanmadı.**
 Kullanıcı, doğrulanmış 3–5 bağımsız dış ekip veya gerçek pilot kabul kanıtı
 bulunmadığını açıkça bildirdi. Teknik fixture kimlikleri, fixture geri bildirimleri,
@@ -178,3 +179,36 @@ HTML/JS/CSS var; runtime'a Playwright/dev dependency sızmamış. `phase7_contro
 Wheel fixture'ı gerçek LLM veya dış ekip değildir. Sonraki kabul adımı GitHub CI'dır.
 
 Kurulum ve manuel adımlar: [onboarding rehberi](phase7-onboarding.md).
+
+### GitHub CI kabulü ve kalan kapı
+
+Kaynak commit: `836a73db28d8b19e2ad04b841a5a56b1ef5f08b9`, dal `codex/development`.
+[CI 43812261593](https://github.com/EgeBasturmen/agentguard/actions/runs/43812261593)
+**13/13 başarılı**: workflow lint, Ubuntu 24.04/Windows 2022 × Python 3.10–3.14,
+gerçek Docker/Chromium job'ı ve zorunlu gate. Her matrix job'ında 382 unit + 282
+integration, ayrı Docker job'ında 52 case; failure/error/skip=0. 11 artifact ZIP
+indirildi; 21 JUnit ve 11 temiz wheel JSON'u sayıları ve Phase 7 feature flag'leriyle
+doğrulandı. Docker artifact'indeki gerçek Chromium sonucu da geçti; browser storage,
+XSS, unknown oracle ve cross-session görünüm kontrolleri başarılı.
+Önceki Phase 6 current ALLOW/known-bad BLOCK JSON/HTML/JUnit paritesi de korundu.
+Tüm wheel'lerde `phase7_control/phase7_authorization=true`; Docker wheel'de
+`phase7_runner=true`; hepsinde `external_pilot_verified=false`.
+
+Bu geliştirmede değişen alanlar: yeni `management/{store,auth,objects,queue,results,
+limits,redaction,pilot,http,client,runner,cli,service}.py` ve paketlenmiş web assets;
+CLI/SDK kaydı; 10 Phase 7 test modülü; browser/wheel probe script'leri; mevcut
+wheel probe/MANIFEST/pyproject/CI/gitignore; README, ROADMAP ve üç Phase 7 belgesi.
+Agent/controller/evaluator/broker/gate motorları yeniden yazılmadı.
+
+Özgün main HEAD/branch/index/status ve kullanıcı dosyaları/raporları koruma
+snapshot'ıyla eşleşti; remote main ve doğrulanmış Phase 2 ref'i değişmedi.
+Önceki Gemini tam canlı sonuç dosyası SHA256
+`46650e2375cada19e0bcbbf18cf9a8bd134feee9e2f31b0b6ba7f923ce48110e` aynı.
+Secrets, DB, private cache, model/browser dosyaları veya kullanıcı sonuçları commit'e
+alınmadı. Ücretli API çağrısı yapılmadı. Teknik kapanış kaydı yalnız ROADMAP ve bu
+belgeyi günceller; uygulama yukarıdaki doğrulanmış kaynak commit'iyle aynıdır.
+
+**AG-075 BLOCKED / PENDING EXTERNAL VALIDATION. Phase 7 bütünü kapatılmadı.**
+3–5 bağımsız gerçek ekip, dokümanla bağlantı, assisted/self-service ayrımı, gerçek
+bug fix/retest ve tekrar kullanım kanıtı eksik. Pilot/onboarding/feedback süreçleri
+hazırdır; gerçek sonuç üretilmiş gibi gösterilmez. Phase 8'e geçilmedi.
