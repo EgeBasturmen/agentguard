@@ -22,7 +22,7 @@ def select_wheel(path: Path) -> Path:
     return wheels[0].resolve()
 
 
-def check_wheel(wheel: Path, wheelhouse: Path | None = None, *, docker: bool = False) -> dict:
+def check_wheel(wheel: Path, wheelhouse: Path | None = None, *, docker: bool = False,browser:bool=False) -> dict:
     wheel = select_wheel(wheel)
     # Source distributions ship runnable test support rather than dangling test imports.
     for source_archive in wheel.parent.glob("agentguard-*.tar.gz"):
@@ -57,7 +57,7 @@ def check_wheel(wheel: Path, wheelhouse: Path | None = None, *, docker: bool = F
         install = [sys.executable, "-m", "pip", "--python", python, "install", "--disable-pip-version-check"]
         if wheelhouse is not None:
             install += ["--no-index", "--find-links", wheelhouse.resolve()]
-        run([*install, wheel])
+        run([*install,str(wheel)+('[browser]' if browser else '')])
         run([sys.executable, "-m", "pip", "--python", python, "check"])
         probe = r'''
 import importlib
@@ -84,6 +84,7 @@ for name in modules:
     location = Path(importlib.import_module(name).__file__).resolve()
     assert location.is_relative_to(root), (name, location, root)
 for name in ("pytest", "pytest_asyncio", "build", "playwright"):
+    if name=='playwright' and '--browser' in sys.argv:continue
     assert importlib.util.find_spec(name) is None, f"Development dependency leaked: {name}"
 for name in ("controlled_worker.py", "worker_client.py"):
     worker_source = importlib.resources.files("agentguard.execution").joinpath(name).read_text(encoding="utf-8")
@@ -100,7 +101,7 @@ for name in ("refund_order.yaml", "crm_update.yaml"):
 print(json.dumps({"version": distribution.version, "python": sys.version.split()[0],
                   "fixture": str(fixtures.joinpath("refund_order.yaml"))}))
 '''
-        details = json.loads(run([python, "-I", "-c", probe]))
+        details = json.loads(run([python, "-I", "-c", probe]+(['--browser'] if browser else [])))
         scenario = details.pop("fixture")
         run([cli, "--help"])
         run([cli, "demo", "--output-dir", work / "demo"])
@@ -242,6 +243,9 @@ print(json.dumps({"version": distribution.version, "python": sys.version.split()
         phase7_probe=work/'phase7_wheel_probe.py'
         phase7_probe.write_bytes(Path(__file__).with_name('phase7_wheel_probe.py').read_bytes())
         details.update(json.loads(run([python,'-I',phase7_probe]+(['--docker'] if docker else []))))
+        phase8_probe=work/'phase8_wheel_probe.py'
+        phase8_probe.write_bytes(Path(__file__).with_name('phase8_wheel_probe.py').read_bytes())
+        details.update(json.loads(run([python,'-I',phase8_probe]+(['--docker'] if docker else [])+(['--browser'] if browser else []))))
         details.update({"wheel": wheel.name, "runtime_only": True, "outside_checkout": True,
                         "console_cli": True, "verdict_parity": True, "status": "passed"})
         return details
@@ -253,8 +257,9 @@ def main():
     parser.add_argument("--wheelhouse", type=Path, help="Optional offline runtime wheel directory")
     parser.add_argument("--result", type=Path, help="Write verification evidence as JSON")
     parser.add_argument("--docker", action="store_true", help="Also execute a real controlled agent from the clean installed wheel")
+    parser.add_argument('--browser',action='store_true',help='Install only the optional browser runtime extra and verify real Chromium fixtures')
     args = parser.parse_args()
-    result = check_wheel(args.wheel, args.wheelhouse, docker=args.docker)
+    result = check_wheel(args.wheel, args.wheelhouse, docker=args.docker,browser=args.browser)
     if args.result:
         args.result.parent.mkdir(parents=True, exist_ok=True)
         args.result.write_text(json.dumps(result, indent=2), encoding="utf-8")

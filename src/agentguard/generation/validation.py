@@ -77,6 +77,10 @@ def validate_candidate(candidate):
                 contract=source.content['contract'];names.add(contract['name'])
         if kind=='filesystem':names.update({'file.read','file.write','file.delete'})
         if kind=='dataset':names.update({'document.get','document.search'})
+        if kind in {'browser','database','inbox','calendar','clock'}:
+            from agentguard.environments import fixture_environment
+            environment=fixture_environment(kind);environment.validate_fixture(fixture)
+            names.update(tool.name for tool in environment.contracts())
         for config in candidate.runtime.tools:
             if config.contract:names.add(config.contract['name'])
             if config.connector=='mock' and requires_business_evidence(scenario):

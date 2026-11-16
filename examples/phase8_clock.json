@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "scenario": {
+    "name": "declared-delayed-effect",
+    "task": "[{\"tool\":\"job.schedule\",\"arguments\":{\"id\":\"receipt\",\"due\":2,\"key\":\"receipt\",\"value\":\"processed\"}},{\"tool\":\"clock.advance\",\"arguments\":{\"to\":2}}]",
+    "initial_state": {"clock":0,"values":{},"jobs":{},"history":[]},
+    "expected_state": [{"path":"values.receipt","value":"processed"},{"path":"jobs","value":{}}]
+  },
+  "agent": {"transport":"python","reference":"phase8_agent:ScriptedAgent","source_dir":".","include_files":["phase8_agent.py"]},
+  "environment": {"kind":"clock"},
+  "tools": [{"connector":"environment"}],
+  "policy": {"allowed_tools":["job.schedule","clock.advance"]}
+}

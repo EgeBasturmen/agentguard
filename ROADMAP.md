@@ -304,12 +304,14 @@ Phase 7 bütünü tamamlanmadı. Mevcut mimari karşılaştırması, güven sın
 
 AG-070–074 teknik kabul kanıtı: kaynak `836a73db28d8b19e2ad04b841a5a56b1ef5f08b9`, yerel **716/716** (382 unit + 282 integration + 52 gerçek Docker), temiz runtime-only wheel ve gerçek Chromium başarılı. [CI 43812261593](https://github.com/EgeBasturmen/agentguard/actions/runs/43812261593) **13/13 başarılı**; 11 artifact/21 JUnit/11 wheel sonucu indirildi ve doğrulandı. Teknik fixture'lar dış pilot değildir; ücretli API çağrısı yapılmadı. AG-075 ve Phase 7 genel kapısı açık; Phase 8 başlatılmadı. Kurulum: `docs/phase7-onboarding.md`.
 Faz 8 — Browser, multi-agent ve uzun görev genişlemesi [4–8 hafta]
-- AG-080: Browser lifecycle, test site fixtures ve authoritative action evidence.
-- AG-081: Database/inbox/calendar environment paketleri.
-- AG-082: Multi-agent identity, message/handoff trace ve shared state.
-- AG-083: Virtual clock/event/job fixtures; delayed effect inspection.
-- AG-084: Bu yüzeylere özgü security ve cancellation testleri.
+- AG-080: Browser lifecycle, test site fixtures ve authoritative action evidence. **Teknik uygulama var; son tüm-suite/wheel/CI kabulü sürüyor.** Kapalı Chromium fixture profili; arbitrary dış site otomasyonu değil.
+- AG-081: Database/inbox/calendar environment paketleri. **Teknik uygulama var; son kabul sürüyor.** Gerçek SQLite record fixture paketleri; production DB/mail/calendar entegrasyonu iddiası yok.
+- AG-082: Multi-agent identity, message/handoff trace ve shared state. **Teknik uygulama var; son kabul sürüyor.** Sıralı controlled Python üyeleri, ayrı container ve controller-owned kimlik/routing; native framework entegrasyonu değil.
+- AG-083: Virtual clock/event/job fixtures; delayed effect inspection. **Teknik uygulama var; son kabul sürüyor.** Declared virtual jobs; pending/unobserved effect BLOCK, dış delayed effect kapsam dışında.
+- AG-084: Bu yüzeylere özgü security ve cancellation testleri. **Yeni regression/security/E2E testleri var; son CI kabulü sürüyor.**
 Kapı: Her yeni yetenek en az bir gerçek entegrasyonda contract/E2E testli; gözlenemeyen delayed effect açıkça kapsam dışında.
+
+Phase 8 kullanıcı onayıyla aynı checkout/dalda başlatıldı. Destek profilleri, bağımlılıklar, gerçek kanıtlar ve manuel entegrasyon sınırları: `docs/phase8-verification.md`. AG-075 **BLOCKED / PENDING EXTERNAL VALIDATION**; Phase 7 genel kapanışı açık kalır. Phase 9 başlatılmadı.
 Faz 9 — Genel kullanıma açılış ve operasyon [3–5 hafta]
 - AG-090: Yük, soak, queue duplication, crash/restart ve cleanup testleri.
 - AG-091: Backup restore, schema migration, retention/delete doğrulaması.

@@ -10,7 +10,7 @@ from agentguard.integrations.agents import PythonAgent,HTTPAgent,ContainerAgent,
 from agentguard.integrations.http import Endpoint,_json
 from agentguard.integrations.tools import ToolContract,RoutedTool,ReplayEntry,OpenAPIConnector,MCPConnector
 from agentguard.integrations.sdk import IntegrationRunner,environment_tools,preflight
-from agentguard.environments import MemoryEnvironment,FilesystemEnvironment,DocumentEnvironment,HTTPEnvironment
+from agentguard.environments import MemoryEnvironment,FilesystemEnvironment,DocumentEnvironment,HTTPEnvironment,fixture_environment
 from agentguard.security.policy import SecurityPolicy
 from agentguard.model_gateway.gateway import GatewayConfig
 from agentguard.integrations.plan_config import EndpointConfig
@@ -25,7 +25,7 @@ class AgentConfig(Model):
     image: str|None=None
     endpoint: EndpointConfig|None=None
 class EnvironmentConfig(Model):
-    kind: Literal['memory','filesystem','dataset','http']
+    kind: Literal['memory','filesystem','dataset','http','browser','database','inbox','calendar','clock']
     endpoint: EndpointConfig|None=None
     allow_staging_writes: bool=False
     service_version: str='1.0.0'
@@ -60,7 +60,7 @@ def run_plan(path,*,cancel_event=None,preflight_only=False):
     return run_integration_plan(plan,base_dir=path.parent,cancel_event=cancel_event,preflight_only=preflight_only)
 
 
-def run_integration_plan(plan,*,base_dir, cancel_event=None,preflight_only=False,expected_contracts=None):
+def run_integration_plan(plan,*,base_dir, cancel_event=None,preflight_only=False,expected_contracts=None,observation_sink=None):
     plan=IntegrationPlan.model_validate(plan.model_dump(mode='json'))
     base_dir=Path(base_dir).resolve()
     config=plan.agent
@@ -80,7 +80,7 @@ def run_integration_plan(plan,*,base_dir, cancel_event=None,preflight_only=False
         environment=HTTPEnvironment(env.endpoint.endpoint(),env.allow_staging_writes,env.service_version)
     else:
         if env.endpoint is not None or env.allow_staging_writes: raise ValueError('Non-HTTP environment cannot declare a network grant')
-        environment={'memory':MemoryEnvironment,'filesystem':FilesystemEnvironment,'dataset':DocumentEnvironment}[env.kind]()
+        environment=fixture_environment(env.kind)
     tools=[]
     for config in plan.tools:
         if config.connector=='environment': tools.extend(environment_tools(environment));continue
@@ -107,4 +107,4 @@ def run_integration_plan(plan,*,base_dir, cancel_event=None,preflight_only=False
     if preflight_only:
         return preflight(plan.scenario,agent,environment,tools,SecurityPolicy.model_validate(plan.policy),plan.required_capabilities,plan.model)
     return IntegrationRunner().run(plan.scenario,agent,environment,tools,policy=SecurityPolicy.model_validate(plan.policy),
-        required_capabilities=plan.required_capabilities,cancel_event=cancel_event,model_config=plan.model)
+        required_capabilities=plan.required_capabilities,cancel_event=cancel_event,model_config=plan.model,observation_sink=observation_sink)

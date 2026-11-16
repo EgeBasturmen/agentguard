@@ -27,6 +27,9 @@ class PreflightResult:
 
 def preflight(scenario,agent,environment,tools,policy,required_capabilities=(),model_config=None):
     result=PreflightResult()
+    if hasattr(environment,'validate_fixture'):
+        try:environment.validate_fixture(scenario.initial_state)
+        except (ValueError,TypeError,KeyError):result.issues.append('Invalid declared environment fixture')
     if not isinstance(agent,(PythonAgent,ContainerAgent,HTTPAgent)):
         result.issues.append('Unsupported agent adapter/protocol');return result
     available=agent.capabilities()
@@ -83,7 +86,7 @@ def preflight(scenario,agent,environment,tools,policy,required_capabilities=(),m
 
 
 class IntegrationRunner:
-    def run(self,scenario,agent,environment,tools=(),*,policy=None,required_capabilities=(),cancel_event=None,model_config=None):
+    def run(self,scenario,agent,environment,tools=(),*,policy=None,required_capabilities=(),cancel_event=None,model_config=None,observation_sink=None):
         scenario=Scenario.model_validate(scenario.model_dump())
         policy=SecurityPolicy.model_validate((policy or SecurityPolicy()).model_dump())
         tools=deepcopy(list(tools))
@@ -144,6 +147,14 @@ class IntegrationRunner:
                 result.execution_context=ExecutionContext(execution_mode='observed',adapter=AdapterIdentity(id='http.endpoint',version='1.0.0'),
                     capabilities=agent.capabilities(),limitations=readiness.coverage_gaps)
             result.integration_status='verified' if result.error_type is None and result.evaluation_status=='complete' else 'unverified'
+            if hasattr(environment,'inspect_completion'):
+                inspection=environment.inspect_completion()
+                result.coverage_gaps.extend(inspection['coverage_gaps'])
+                if not inspection['complete']:
+                    result.passed=False;result.status='error';result.error_type='UnobservedDelayedEffects'
+                    result.error_message='Pending declared effects remain outside the observed virtual-time window.'
+                    result.error_stage='evaluation';result.integration_status='unverified'
+            if observation_sink is not None:observation_sink(deepcopy(environment.snapshot()))
         except Exception as exc:
             result=RunResult(scenario_name=scenario.name,passed=False,status='error',error_stage='provision',
                 error_type=type(exc).__name__,error_message=str(exc),integration_status='unverified')

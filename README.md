@@ -269,3 +269,11 @@ kurallar ve insan oracle onayı gerektirir; otomatik agent/framework keşfi yokt
 AG-075 gerçek dış ekip doğrulaması bekliyor; Phase 7 bütünü tamamlanmış değildir.
 [Kurulum](docs/phase7-onboarding.md), [teknik kanıt/sınırlar](docs/phase7-verification.md),
 [gerçek pilot planı](docs/phase7-pilot-plan.md).
+
+## Phase 8 fixture yüzeyleri
+
+Kapalı Chromium test app, gerçek SQLite database/inbox/calendar fixture’ları,
+sanal clock/job ve sıralı controlled Python team desteği mevcut broker/observer
+akışını kullanır. Pending delayed effect PASS üretmez. Native framework keşfi,
+genel dış-site browser otomasyonu veya gerçek mail/calendar teslimatı iddiası yoktur.
+[Kullanım, güven sınırları ve doğrulama](docs/phase8-verification.md).

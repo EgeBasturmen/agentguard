@@ -7,5 +7,8 @@ include examples/phase6_agent.py
 include scripts/check_wheel.py
 include scripts/phase5_wheel_probe.py
 include scripts/phase7_wheel_probe.py
+include scripts/phase8_wheel_probe.py
+include examples/phase8_agent.py
+include examples/phase8_clock.json
 include scripts/check_phase7_ui.py
 recursive-include src/agentguard/management/web *.html *.js *.css

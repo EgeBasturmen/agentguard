@@ -117,7 +117,7 @@ jobs:
       - name: Verify execution, gateway, evaluations, sessions and generation from a clean wheel (no paid APIs)
         run: |
           python -m build --outdir artifacts/dist
-          python scripts/check_wheel.py artifacts/dist --docker --result artifacts/docker-wheel-check.json
+          python scripts/check_wheel.py artifacts/dist --docker --browser --result artifacts/docker-wheel-check.json
       - name: Frozen baseline and real source regression gate (no external APIs)
         env:
           SUITE_PROFILE: ${{ github.event_name == 'release' && 'release' || github.event_name == 'schedule' && 'scheduled' || inputs.suite_profile || 'pr' }}
