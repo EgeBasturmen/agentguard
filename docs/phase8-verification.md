@@ -1,6 +1,8 @@
 # Phase 8: kapalı browser, servis fixture’ları, sıralı ekip ve sanal zaman
 
-Durum: teknik uygulama yerelde doğrulanıyor; CI kabulü henüz kaydedilmedi.
+**Güncel durum: AG-080–084 aşağıdaki destek profilleriyle tamamlandı.**
+Kaynak CI 13/13 başarılı; 754 test ve temiz wheel/gerçek Chromium/Docker kabulü
+doğrulandı. Aşağıdaki eski bekleme/başarısız koşu notları tarihsel kayıtlardır.
 AG-075 **BLOCKED / PENDING EXTERNAL VALIDATION** olarak kalır; Phase 7 bütünü
 kapatılmaz. Gerçek dış ekip/pilot sonucu üretilmedi. Phase 9 başlatılmadı.
 Başlangıç aynı checkout/dal: `codex/development`, `95d0ebc55d5fc4bb8a9f0598a805c2a8a9202a6a`.
@@ -115,5 +117,64 @@ sözleşmesine düzeltildi ve tek hedefli test geçti. Yeni fixture doğrulamas�
 beş RED testten sonra provision yapmadan static preflight/generation kontrolü eklendi.
 Son 753 testlik temiz koşu ve CI kabulü beklenir; önceki başarısız JUnit korunur.
 
+### Son yerel kabul
+
+`artifacts/phase8-release-tests.xml`: **753/753 başarılı**, 414,19 saniye,
+failure/error/skip=0 (382 unit + 303 integration + 68 gerçek Docker).
+Son destek kataloğu eksiği için bir yeni RED unit test eklendi; calendar/clock contract
+kind’ları ve beş yalnız controlled/closed-fixture katalog satırı düzeltildi.
+`artifacts/phase8-release-unit.xml`: **383/383 unit başarılı**. Böylece mevcut
+716 + 38 yeni = **754 benzersiz test** doğrulandı; 754 testin tek final CI katman
+koşusunda da geçmesi kapanış önkoşuludur. Yerel tam koşu katalog eklemesinden önce,
+son unit katmanı katalog eklemesinden sonradır; farklı kayıtlar tek koşu gibi sunulmaz.
+
+Eşzamanlı bir ara unit koşusunda mevcut unknown-marker subprocess teşhis testi
+beklenen hata metnini bulamadı. Ürün veya eski test gevşetilmedi; aynı subprocess
+yeniden gerçekten unknown marker hatasını verdi, hedefli test ve ardından 383 unit
+temiz geçti. Geçici hatanın kesin nedeni doğrulanmadı; başarısız JUnit korundu.
+
+Son dosyalar: `environments/{services,clock,browser,browser_service}.py`, mevcut
+environment factory/plan/preflight/validation, `integrations/{team,team_cli}.py`,
+CLI/SDK/catalog kaydı, beş Phase 8 test modülü, wheel probe/optional extra/CI,
+iki genel örnek ve README/ROADMAP/bu rapor. Controller/broker/worker/gate yeniden
+yazılmadı. Main/özgün index/status/kullanıcı dosyaları koruma kontrolleri eşleşir.
+
 Browser context/close sözleşmesi resmi [Playwright context](https://playwright.dev/python/docs/api/class-browsercontext)
 ve [browser](https://playwright.dev/python/docs/api/class-browser) belgeleriyle kontrol edildi.
+
+## Nihai CI kabulü
+
+Uygulama commit’i `9c972c9139b757ccb80f910ce99fe2a9897f6ec3`, dal
+`codex/development`. [CI 43943423855](https://github.com/EgeBasturmen/agentguard/actions/runs/43943423855)
+**13/13 başarılı**: workflow lint; Ubuntu 24.04/Windows 2022 × Python 3.10–3.14;
+ayrı gerçek Docker/Chromium job’ı ve zorunlu gate. Her matrix job’ında **383 unit +
+303 integration**; ayrı Docker job’ında **68 case** geçti. Son kaynak üzerindeki
+**754 testin tüm katmanlarında failure/error/skip=0**; önceki 716 test korunur.
+
+11 artifact ZIP indirildi, 21 JUnit ve 11 temiz wheel JSON’u sayı ve feature
+flag’leriyle doğrulandı. Tüm wheel’lerde `phase8_contracts=true`; Docker wheel’de
+`phase8_execution/browser/team=true`. `live_api_calls=0`, `external_pilot_verified=false`.
+Eski gateway/session/generation/private runner kanıtları; Phase 6 current ALLOW /
+known-bad BLOCK JSON/HTML/JUnit paritesi ve Phase 7 gerçek Chromium session/XSS/
+unknown-oracle kontrolleri de korundu. CI geçici local marker-test hatasını üretmedi.
+
+Son yerel package kanıtı `artifacts/phase8-release-wheel.json`: checkout dışındaki
+runtime-only temiz kurulum, yalnız opsiyonel browser runtime extra’sı, gerçek Chromium,
+beş fixture yüzeyi ve iki ayrı container team yürütmesi başarılı. Dev/test dependency
+runtime’a taşınmadı. Önceki `phase8-verified-wheel.json` katalog eklemesi öncesi kayıttır;
+son kayıt yeni destek katalog satırlarını da kontrol eder. Build, sdist’ten wheel’dir.
+
+Main/özgün index/status/kullanıcı dosyaları ve rapor hash’leri başlangıç koruma
+snapshot’ıyla eşleşti. Remote main ve Phase 2 ref’i değişmedi. Önceki Gemini sonucu
+SHA256 `46650e2375cada19e0bcbbf18cf9a8bd134feee9e2f31b0b6ba7f923ce48110e`
+aynı kaldı. Secrets, DB, browser/model dosyaları, test artifact’leri ve kullanıcı
+sonuçları Git’e alınmadı. Kapanış kaydı yalnız ROADMAP/bu raporu değiştirir;
+uygulama yukarıdaki kaynak commit’iyle aynıdır.
+
+**AG-075 BLOCKED / PENDING EXTERNAL VALIDATION. Phase 7 bütünü tamamlanmadı.**
+3–5 bağımsız dış ekip, gerçek bug/retest ve tekrar kullanım kanıtı halen yoktur.
+Teknik fixture’lar dış pilot değildir. “Agent’ını Bağla → Test Et → Rapor Al” için
+yeni environment/tool mapping ve generation/review yeniden kullanılır; agent wrapper,
+source/image pin, fixture ve bağımsız oracle girdileri manuel kalır. Team UI/queue,
+genel dış site/production service entegrasyonu, native framework keşfi ve görünmeyen
+delayed effect doğrulaması tamamlandı sayılmaz. Phase 9 başlatılmadı.
