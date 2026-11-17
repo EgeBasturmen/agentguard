@@ -1,7 +1,9 @@
 # Phase 9: operasyon ve private-pilot güvenilirliği
 
-Güncel durum (17 Kasım 2026): uygulama ve kabul doğrulaması sürüyor; henüz Phase 9
-kapanışı ilan edilmedi. Başlangıç `cfb22f00c00f8b437e9497eb3c07ccaedd0153fa`, aynı
+Güncel durum (17 Kasım 2026): **AG-090–094 belgelenen private-controller/private-pilot
+destek profilleriyle teknik olarak tamamlandı.** 792 test, gerçek Docker/Chromium,
+30 dakikalık controller soak, temiz wheel ve 13/13 CI doğrulandı. Bu kapanış public GA
+veya dış pilot başarısı değildir. Başlangıç `cfb22f00c00f8b437e9497eb3c07ccaedd0153fa`, aynı
 `artifacts/phase2/repo` checkout’u ve `codex/development`. Mevcut 754 test korunur.
 AG-075 **BLOCKED / PENDING EXTERNAL VALIDATION**, Phase 7 genel kapısı açık kalır.
 
@@ -100,8 +102,8 @@ Docker/TLS/Chromium testleri geçti. Gerçek browser yolculuğu
 `artifacts/phase9-ui-journey.json` başarılı; ödeme sentetik/manuel teknik fixture’dır.
 İlk HTTP burst `artifacts/phase9-controller-soak.json` ölçümü test rate override’ı
 kullanıyordu; final kabulün varsayılan limit kanıtı değildir. Yerine 8 principal ile
-varsayılan limitlerde `phase9-default-limits-soak.json` çalıştırılır.
-Son tüm suite, temiz wheel ve CI sayıları doğrulandıktan sonra eklenecektir.
+varsayılan limitlerde `phase9-default-limits-soak.json` çalıştırıldı.
+Son kabul kanıtları aşağıdadır; ara başarısızlık kayıtları korunur.
 
 Ara geniş suite **788/788** geçti (`phase9-final-tests.xml`, 642,43 saniye).
 Yeni account/owner guard testleriyle sonraki **791** koşusunda iki eski controlled
@@ -117,4 +119,63 @@ kanıtı upload edebiliyordu. Gerçek browser testi önce AssertionError verdi; 
 tenant guard’ının reddi korundu. Dosya okumaları sonrası epoch kontrolüyle
 `phase9-file-read-fenced.json` gerçek Chromium/Docker/account-delete yolculuğu geçti.
 `private_file_read_fenced=true`; sentetik manual payment, dış pilot/gerçek ödeme değil.
-Son 792 test katmanı, yeni clean wheel ve CI kabulü ayrıca doğrulanacaktır.
+Son kabul koşusu **792/792 başarılı** (387 unit + 333 integration + 72 gerçek Docker
+katmanı), 774,09 saniye; failure/error/skip=0. JUnit:
+`artifacts/phase9-acceptance-tests.xml`. Önceki 754 case korunur; 38 yeni case vardır.
+Yukarıdaki başarısız ara koşu kaydı korunur; son kabulde timeout/assertion gevşetilmedi.
+
+## Kaynak CI ve operasyon kabul kanıtları
+
+Kaynak commit `6211741c1210d0ca6974b3159472e24a66324834` için
+[CI 43982608526](https://github.com/EgeBasturmen/agentguard/actions/runs/43982608526)
+**13/13 başarılı**. Ubuntu 24.04 / Windows 2022 × Python 3.10–3.14 job'larının
+her birinde 387 unit + 333 integration; ayrı Docker job'ında 72 case,
+gerçek Chromium ve paketlenmiş worker testleri başarılı. Lint ve zorunlu gate geçti.
+11 artifact ZIP indirildi; 21 JUnit ve 11 runtime-only temiz wheel JSON'u
+sayı/feature flag/failure/error/skip=0 ile kontrol edildi. Önceki fazların
+execution, generation, gateway, regression ve browser/team kanıtları korundu.
+
+Docker job'ındaki `phase9-ui.json`: gerçek HTTP/Docker/Chromium ile
+connect/generate/review/freeze/execute/report, private File.text oturum fence'i,
+synthetic manual plan/cancel ve primary proje+workspace erase başarılıdır.
+Gerçek ödeme, dış pilot ve canlı model çağrısı yoktur. `phase9-load.json`:
+40 cycle, 24 duplicate/8 thread, 41 admission, 148 istek, 42,494 saniye,
+p95 0,02755 saniye. Varsayılan principal limiti 120/min korunur.
+
+Yerel `artifacts/phase9-30min-controller-soak.json`: **passed**, 60 cycle,
+24 duplicate/8 thread, 61 admission, 208 istek, **1818,469 saniye**;
+p50 0,062 / p95 0,375 saniye. Sekiz sentetik teknik principal kullanıldı;
+varsayılan 120/min limit değiştirilmedi. SHA256:
+`3fb8eaddb1f2acf40bb72d0ef2384e8e11110c3842cc616c5cae5b9f97fe4fa2`.
+Bu hash dosya kimliğidir, bağımsız servis attestation'ı değildir. Ayrı kısa yerel
+80-cycle/81-admission koşusu 91,234 saniyede geçti. Bunlar controller queue/cancel
+soak'ıdır; gerçek agent throughput veya günler süren production qualification değildir.
+
+İzole sdist ve sdist'ten wheel build başarılıdır. Yerel temiz wheel kontrolünün
+ilk denemesinde sandbox ağ kısıtlaması pip indirmesini engelledi (WinError 10013);
+test/bağımlılık gevşetilmeden aynı komut izinli ağ erişimiyle yeniden çalıştırıldı ve
+**başarılı oldu**. `artifacts/phase9-acceptance-wheel.json`: runtime_only,
+outside_checkout, verdict_parity, controlled_docker, phase8_browser/team ve
+phase9_operations/backup_restore/billing_reconciliation/worker=true. Phase 0–8
+probe'ları da geçti. real_llm_verified/external_pilot_verified/real_payment_verified=false,
+live_api_calls=0 kapsamı doğru belirtir; bu fazda yeni LLM/ödeme çağrısı yapılmadı.
+CI'ın 11 temiz wheel sonucu yukarıda ayrıca doğrulanmıştır.
+
+## Kapanış ve kalan işler
+
+AG-090–094 kabulü yukarıdaki sınırlı, test edilmiş destek profilleri içindir.
+Tek aktif controller/private runner, düşük hacim ve operatör gözetimiyle gerçek
+pilot başlatılabilir; gerçek müşterilerle başarı henüz kanıtlanmadı. 256 MiB toplam
+backup profili büyük/multi-project veri hacimleri için yeterlilik iddiası değildir.
+HA/distributed workers, public signup/SSO, otomatik framework keşfi, production
+finance entegrasyonu, günler süren worker yük testi, bağımsız pentest ve harici
+kopyaların silinmesi ayrıca kabul gerektirir. Otomatik generation, bağımsız fixture/
+oracle ve insan review zorunluluğunu kaldırmaz.
+
+Main/özgün index/status/kullanıcı dosyaları ve eski rapor hash kontrolleri eşleşti.
+Phase 5 kullanıcı canlı dosyasının SHA256'sı
+`46650e2375cada19e0bcbbf18cf9a8bd134feee9e2f31b0b6ba7f923ce48110e`
+korundu. Test/backup/live artefaktları ve anahtarlar Git'e dahil edilmez.
+Son kapanış commit'i yalnız ROADMAP ve bu doğrulama raporunu günceller; uygulama
+kodu yukarıdaki kaynak commit ile aynıdır. **AG-075 BLOCKED / PENDING EXTERNAL
+VALIDATION**, Phase 7 genel kapısı açık; Phase 10 kullanıcı onayı olmadan başlatılmaz.
