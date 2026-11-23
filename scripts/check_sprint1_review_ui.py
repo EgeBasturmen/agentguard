@@ -10,7 +10,7 @@ from playwright.sync_api import sync_playwright, expect
 
 from agentguard.management.http import make_server
 from agentguard.management.service import ControlPlane
-from sprint1_verification_support import secure_fixture_directory
+from sprint1_verification_support import secure_fixture_directory, FixturePermissionError
 
 
 @contextmanager
@@ -161,7 +161,11 @@ if __name__ == '__main__':
         parser.error('Invalid test port')
     if args.result is not None and args.result.exists():
         parser.error('Result file exists; refusing overwrite')
-    result = dict(current=verify(port=args.port), legacy=verify(legacy=True))
+    try:
+        result = dict(current=verify(port=args.port), legacy=verify(legacy=True))
+    except FixturePermissionError as error:
+        print(json.dumps(dict(status='failed',stage=error.stage,category=error.category,exit_code=error.exit_code)))
+        raise SystemExit(2) from None
     if args.result is not None:
         args.result.parent.mkdir(parents=True, exist_ok=True)
         with args.result.open('x', encoding='utf-8') as output:

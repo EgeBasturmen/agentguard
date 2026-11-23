@@ -57,6 +57,9 @@ jobs:
       - name: Integration tests
         if: ${{ !cancelled() }}
         run: python -m pytest -q -m integration --junitxml=artifacts/integration.xml
+      - name: Verify native Windows fixture ACLs and fail-closed diagnostics
+        if: matrix.os == 'windows-2022'
+        run: python -m pytest -q scripts/test_sprint1_windows_acl.py --junitxml=artifacts/sprint1-windows-acl.xml
       - name: Install browser probe dependency on Windows
         if: matrix.os == 'windows-2022' && matrix.python == '3.11'
         run: python -m pip install ".[ui]"

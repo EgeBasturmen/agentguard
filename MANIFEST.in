@@ -17,4 +17,5 @@ include scripts/check_phase7_ui.py
 include scripts/check_sprint1_review_ui.py
 include scripts/check_sprint1_restore.py
 include scripts/sprint1_verification_support.py
+include scripts/test_sprint1_windows_acl.py
 recursive-include src/agentguard/management/web *.html *.js *.css

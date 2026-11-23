@@ -7,7 +7,7 @@ import argparse
 
 from agentguard.management.operations import backup, restore
 from agentguard.management.service import ControlPlane
-from sprint1_verification_support import secure_fixture_directory
+from sprint1_verification_support import secure_fixture_directory, FixturePermissionError
 
 
 def inspect(root, project):
@@ -81,7 +81,11 @@ if __name__ == '__main__':
     args = parser.parse_args()
     if args.result is not None and args.result.exists():
         parser.error('Result file exists; refusing overwrite')
-    result = verify()
+    try:
+        result = verify()
+    except FixturePermissionError as error:
+        print(json.dumps(dict(status='failed',stage=error.stage,category=error.category,exit_code=error.exit_code)))
+        raise SystemExit(2) from None
     if args.result is not None:
         args.result.parent.mkdir(parents=True, exist_ok=True)
         with args.result.open('x', encoding='utf-8') as output:
