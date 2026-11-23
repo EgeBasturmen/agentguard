@@ -14,4 +14,7 @@ recursive-include docs *.md
 include examples/phase8_agent.py
 include examples/phase8_clock.json
 include scripts/check_phase7_ui.py
+include scripts/check_sprint1_review_ui.py
+include scripts/check_sprint1_restore.py
+include scripts/sprint1_verification_support.py
 recursive-include src/agentguard/management/web *.html *.js *.css

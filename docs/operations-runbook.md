@@ -25,6 +25,18 @@ yeniden oluşturup bozuk DB’ye boş tablolar eklemeyin. Disk dolu/permission/l
 varsa yeni koşu başlatmayın. Önce dosya sistemi/boş alan/tek-process durumunu düzeltin.
 Yeni state oluşturup eski veriyi sessizce kaybolmuş gibi göstermeyin.
 
+Sprint 1 ile management işlemlerindeki scenario/source/review/suite yazıları,
+control DB bağlantısına attach edilerek aynı transaction'da commit edilir. Dosya
+konumları ve schema sürümleri değişmez; destructive migration yoktur. Çok dosyalı
+atomik commit için disk-backed SQLite rollback journal gerekir; WAL/OFF/MEMORY
+modları `ATOMIC_SCENARIO_STORAGE_REQUIRED` ile reddedilir, otomatik dönüştürülmez.
+[SQLite ATTACH garantisinin sınırı](https://www.sqlite.org/lang_attach.html) esas
+alınır; gerçek güç kesintisi/disk arızası tatbikatı yapıldığı iddia edilmez.
+Güncellenmiş frontend eski backend'in case yanıtında yeni review yeteneği yoksa
+eski API biçimini korur. Transaction ve stale-review korumasını devreye almak için
+operatör daha sonra kontrollü backend restart yapmalıdır; kaynak dosyasını
+güncellemek çalışan Python sürecinin kodunu yenilemez.
+
 ## Backup / restore
 
 Backup imzalıdır, şifreli değildir. Archive, `signing.key` ve **güncel** `deletions.json`

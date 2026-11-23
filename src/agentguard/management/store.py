@@ -54,6 +54,7 @@ class Store:
         self.db_path=self.root/'control.sqlite'
         if self.db_path.is_symlink():raise AccessError('UNSAFE_STORAGE',400)
         self.clock=clock or time.time;self.rate_limit=rate_limit;self.lock=threading.RLock()
+        self._db_local=threading.local()
         self.migrate_schema=migrate_schema
         with state_lock(self.root):self._initialize()
 
@@ -96,15 +97,20 @@ class Store:
     def db(self):
         with state_lock(self.root):
             connection=sqlite3.connect(self.db_path,timeout=15);connection.row_factory=sqlite3.Row
+            previous=getattr(self._db_local,'connection',None)
             try:
                 connection.execute('PRAGMA secure_delete=ON')
+                connection.execute('PRAGMA synchronous=FULL')
                 with connection:
                     connection.execute('BEGIN IMMEDIATE')
                     if (self.root/'deletions.json').exists():
                         from agentguard.management.operations import apply_deletions
                         apply_deletions(self,connection)
+                    self._db_local.connection=connection
                     yield connection
-            finally:connection.close()
+            finally:
+                self._db_local.connection=previous
+                connection.close()
 
     def consume_rate(self,key):
         path=self.root/'abuse.sqlite'
@@ -127,4 +133,21 @@ class Store:
 
     def scenario_repository(self,project):
         from agentguard.generation.repository import ScenarioRepository
-        return ScenarioRepository(self.scenario_repository_path(project))
+        path=self.scenario_repository_path(project)
+        connection=getattr(self._db_local,'connection',None)
+        if connection is None:return ScenarioRepository(path)
+        # SQLite's multi-file atomic commit requires disk-backed rollback journals,
+        # not WAL/OFF/MEMORY. Never silently convert an operator's existing database.
+        databases={row[1]:row[2] for row in connection.execute('PRAGMA database_list')}
+        if not databases.get('main') or connection.execute('PRAGMA main.journal_mode').fetchone()[0] not in {'delete','truncate','persist'}:
+            raise AccessError('ATOMIC_SCENARIO_STORAGE_REQUIRED',409)
+        if path.is_symlink() or path.exists() and path.stat().st_nlink!=1:raise AccessError('UNSAFE_STORAGE',400)
+        schema='scenario_'+check_id(project)
+        if schema not in databases:
+            connection.execute(f'ATTACH DATABASE ? AS "{schema}"',(str(path),))
+        elif Path(databases[schema]).resolve()!=path.resolve():raise AccessError('UNSAFE_STORAGE',400)
+        if connection.execute(f'PRAGMA "{schema}".journal_mode').fetchone()[0] not in {'delete','truncate','persist'}:
+            raise AccessError('ATOMIC_SCENARIO_STORAGE_REQUIRED',409)
+        if connection.execute(f'PRAGMA "{schema}".synchronous').fetchone()[0]<2:
+            raise AccessError('ATOMIC_SCENARIO_STORAGE_REQUIRED',409)
+        return ScenarioRepository(path,connection=connection,schema=schema)

@@ -91,7 +91,8 @@ class Objects:
         case,status,review=self.scenario_repository(project).get(payload['case']['id'],payload['case']['revision'])
         validation=validate_candidate(case)
         return dict(id=object_id,case=case.model_dump(mode='json'),status=status,review=review,
-            oracle_checks={key:definitions(case.scenario)[key] for key in case.oracle_checks},ready=validation.ready,issues=validation.issues,connection=payload['connection'])
+            oracle_checks={key:definitions(case.scenario)[key] for key in case.oracle_checks},ready=validation.ready,issues=validation.issues,connection=payload['connection'],
+            review_concurrency='fingerprint-v1')
 
     def case(self,token,project,case_id):
         with self.db() as db:
@@ -109,11 +110,15 @@ class Objects:
             self.event(db,actor['workspace'],project,actor['user'],'scenario.generate',connection)
             return dict(cases=items,approved=0,review_required=True,gaps=batch.gaps)
 
-    def review_case(self,token,project,case_id,*,decisions,fixture,classification,notes=''):
+    def review_case(self,token,project,case_id,*,decisions,fixture,classification,notes='',expected_review_fingerprint=None):
         with self.lock,self.db() as db:
             actor=self._auth(db,token,project,'suite:review');payload=json.loads(self._object(db,project,case_id,'case')['payload']);reject_credentials(notes)
-            case=payload['case'];review=self.scenario_repository(project).review(case['id'],case['revision'],reviewer=actor['user'],decisions=decisions,
-                fixture_confirmed=fixture,classification_confirmed=classification,notes=notes)
+            from agentguard.generation.repository import ReviewConflictError
+            case=payload['case']
+            try:
+                review=self.scenario_repository(project).review(case['id'],case['revision'],reviewer=actor['user'],decisions=decisions,
+                    fixture_confirmed=fixture,classification_confirmed=classification,notes=notes,expected_review_fingerprint=expected_review_fingerprint)
+            except ReviewConflictError:raise AccessError('REVIEW_CHANGED_RELOAD',409) from None
             self.event(db,actor['workspace'],project,actor['user'],'scenario.review',case_id);return review
 
     def approve_case(self,token,project,case_id,fingerprint):
