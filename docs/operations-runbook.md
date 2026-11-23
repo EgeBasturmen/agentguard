@@ -39,6 +39,21 @@ güncellemek çalışan Python sürecinin kodunu yenilemez.
 
 ## Backup / restore
 
+Windows sentetik fixture ACL sözleşmesi: boş root'un sahibi mevcut kullanıcı SID'i
+olmalı; DACL inheritance kapalı ve yalnız o kullanıcıya ait tek, explicit FullControl
+Allow kuralı bulunmalıdır. Sonradan oluşturulan child'ın DACL inheritance'ı aynı
+kullanıcıya ait kuralı devralmalıdır. Child sahipliği parent'tan miras alınmaz;
+oluşturan token'ın default-owner SID'iyle ayrıca karşılaştırılır. Bu sahiplik
+karşılaştırması DACL veya erişim reddi kontrolünün yerine geçmez.
+
+Bu profil güvenilen operatör/test token'ı içindir. Default owner bir grup ise,
+grubun güvenilmeyen üyeleri nesnenin DACL'ini değiştirebilir; owner'ın implicit
+WRITE_DAC hakkı vardır. Böyle bir ortamda yalnız inheritance yeterli güvenlik
+kanıtı değildir: ayrı güvenilen servis kimliği veya açık child ownership yönetimi
+gerekir. Native Authz testleri sentetik yetkisiz principal için directory-list/read
+erişiminin reddini doğrular; ayrı gerçek hesapla oturum açma, admin ayrıcalıklarına
+karşı izolasyon veya shared-hostile multi-tenancy kanıtı değildir.
+
 Backup imzalıdır, şifreli değildir. Archive, `signing.key` ve **güncel** `deletions.json`
 ayrı kontrollü/şifreli storage’da tutulur. Secret/key içeriğini terminale, Git’e,
 incident ticket’a veya rapora yazmayın. `.agbackup` ve `.agentguard/` Git dışındadır.
