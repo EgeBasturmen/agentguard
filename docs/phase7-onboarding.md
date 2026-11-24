@@ -64,8 +64,98 @@ agentguard management runner --server http://127.0.0.1:8765 --credential-file .a
 ```
 
 Runner cache başlangıçta yeni/boş olmalıdır. Canonical kanıt bu özel cache’te kalır.
+Her runner için ayrı cache kullanın; paylaşılan cache desteklenmez. Windows'ta güvenilen,
+tercihen ayrı bir OS hesabı kullanın.
 İşletim sistemi kullanıcısı, controller operatörü ve custom host adapter’lar güvenilir
 kabul edilir. Private runner’ın kendi beyanı bağımsız attestation değildir.
+
+### Güvenli enrollment input ve credential publication (S2-01)
+
+Varsayılan gizli terminal istemi korunur. Terminal gizli giriş sağlayamazsa komut
+durur; echo yapan otomatik fallback yoktur. PowerShell yapıştırma sorunu yaşanırsa
+aşağıdaki **açık stdin seçeneğini**, önceden hazırlanmış özel dizindeki yeni bir
+hedefle kullanın. Kod yalnız gizli `Read-Host` istemine yapıştırılır; komut metnine,
+environment variable'a veya dosyaya konmaz. Bu örnek enrollment yapar; otomatik
+retry içermez. Runner başlatılması ayrı işlemdir.
+
+```powershell
+$agEnrollment = Read-Host 'Tek kullanımlık enrollment kodu' -AsSecureString
+try {
+    ([System.Net.NetworkCredential]::new('', $agEnrollment)).Password |
+        agentguard management enroll --server http://127.0.0.1:8765 --credential-file "$env:LOCALAPPDATA/AgentGuard/runner-new.key" --enrollment-stdin
+}
+finally {
+    Remove-Variable agEnrollment -ErrorAction SilentlyContinue
+}
+```
+
+`--enrollment-stdin` interaktif stdin'i reddeder; pipe EOF ile kapanmalıdır. En fazla
+128 karakter okunur; yalnız tek, geçerli enrollment kodu ve opsiyonel tek satır sonu
+kabul edilir. Boş/iptal/geçersiz giriş sunucuya gönderilmez. PowerShell/Python
+belleğinde secret'ın kısa süreli plaintext karşılığı vardır; SecureString tüm
+belleği sıfırlama veya güvenilmeyen yerel kullanıcıya karşı koruma garantisi değildir.
+Transcription, debug trace ve komut çıktısını kaydeden wrapper kullanmayın.
+
+Credential hedefi varsa, boş olsa bile değiştirilmez, silinmez veya izinleri
+onarılmaz. Windows'ta özel staging ve final dosya sahibi mevcut kullanıcı SID'i,
+korumalı DACL tek kullanıcı FullControl olmalıdır. POSIX dosyası owner-only'dir.
+Ebeveyn dizine güvenilmeyen hesapların yazma/silme izni varsa exchange başlamaz.
+Windows SYSTEM/yerel yöneticiler güvenilen host sınırındadır; izin kontrolü bunun
+yerine geçmez. Credential içeriği izin doğrulanmadan okunmaz/yazılmaz.
+
+Yeni credential önce rastgele özel staging alanında tamamen yazılır, flush ve
+izin kontrolü yapılır; ardından overwrite etmeyen atomik rename ile yayımlanır.
+Başarı yalnız final credential tekrar doğrulanınca bildirilir. Yerel Windows/Linux
+dosya sistemleri desteklenir; Linux `renameat2(RENAME_NOREPLACE)` desteği gereklidir.
+Desteklenmeyen dosya sistemi/atomiklikte fail-closed; network/sync dizini desteklenmez.
+Bu süreç çökmesine karşı absent-or-complete publication sağlar; donanım/power-loss
+dayanıklılığı dosya sistemi ve işletim sistemi garantileriyle sınırlıdır.
+
+Hata JSON'u secret yerine `operation_status`, `publication_status`,
+`credential_written=false` ve `recovery_required` bildirir:
+
+- `not_started`: exchange yapılmadı; yerel input/izin/hedef sorununu inceleyin.
+- `rejected`: sunucu açık 4xx reddi verdi; otomatik tekrar yapılmaz.
+- `unknown`: bağlantı/yanıt belirsiz; token tüketilmiş olabilir. Aynı kodla körlemesine
+  retry veya yeniden enrollment yapmayın. Operatör sunucudaki enrollment/runner
+  kayıtlarını salt okunur incelemeli; belirsiz runner'ı güvenli şekilde revoke edip
+  yeni kod oluşturma kararı ayrıca verilmelidir.
+- `accepted` + yerel publication hatası: sunucu başarılı yanıt verdi, fakat credential
+  saklanması doğrulanamadı. Başarı değildir. `publication_status=unverified` ise final
+  dosya mevcut ve tam olabilir; kesinlikle üzerine yazmayın/silmeyin. Önce yalnız
+  metadata/izin kontrolü yapın; içerik veya secret'ı destek kaydına koymayın. Operatör
+  gerekirse orphan runner'ı revoke eder, yeni kod ve **yeni hedef** ile ayrı işlem yapar.
+
+Revoke kararı öncesi ilgili proje, enrollment adı/zamanı ve runner kimliği bağımsız
+sunucu kayıtlarından eşleştirilmelidir. Kimlik kesinleşmiyorsa başka runner'ları
+tahminen revoke etmeyin; operatör incelemesini bekleyin. Credential'ın bir kere
+dönen plaintext değeri sunucudan yeniden okunabilir kabul edilmez.
+
+Sunucu exchange ve yerel dosya yayını distributed transaction değildir. Aradaki
+crash'in sunucu sonucunu yerel dosyadan tek başına belirlemek mümkün değildir.
+Sonuç teslimi retry ve belirsiz execution yeniden çalıştırılması S2-01 kapsamında
+değişmez; belirsiz execution otomatik tekrar çalıştırılmaz.
+
+Secret içermeyen kalıcı `.agentguard-credential-*.lock` eşzamanlı yerel publisher'ları
+koordine eder; işlem sonunda silinmez (split-lock yarışını önler). Hard crash özel
+`.agentguard-private-*` orphan staging bırakabilir; otomatik tarama/kurtarma/silme
+yapılmaz. Yalnız normal hatada işlemin kendi staging'i temizlenir. Orphan'ları backup
+ve erişim yönetiminde secret içerebilen dosya olarak değerlendirin. Ortak writer'ı
+kullanan `init`, `recover-owner`, `create-account` da aynı publication ve belirsizlik
+sınırlarına tabidir; başarısız yerel yazım sunucu/DB işlemini geri almış sayılmaz.
+
+Orphan staging için güvenli operatör temizliği ayrı, açık onaylı bir işlemdir:
+
+1. İlgili publisher'ın artık çalışmadığını doğrulayın. Çalışan publisher varken
+   staging veya kalıcı guard dosyasına müdahale etmeyin.
+2. Tam hedefi, sahipliğini, özel izinlerini ve reparse/symlink olmadığını içerik
+   okumadan doğrulayın. İzinler belirsizse okumayın; güvenlik incelemesine bırakın.
+3. Exchange sonucunu bağımsız sunucu kayıtlarıyla eşleştirin. Gerekli revoke/recovery
+   kararını verin; orphan içeriğini terminale açmayın veya otomatik credential yapmayın.
+4. Yalnız doğrulanmış, artık gerekmeyen tek staging dizini ve içindeki bilinen
+   credential dosyası için açık silme onayı alın. Wildcard/genel temizlik yapmayın;
+   final credential ve kalıcı guard'a dokunmayın. Normal silme, SSD/snapshot/backup
+   kopyalarından güvenli silinme garantisi değildir. İçeriği loglamadan sonucu kaydedin.
 
 ## 2. Test et
 

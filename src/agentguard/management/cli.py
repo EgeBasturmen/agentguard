@@ -2,40 +2,43 @@
 from pathlib import Path
 import getpass
 import json
-import os
 import re
 import ssl
 import time
+import sys
+import warnings
 import typer
+try:
+    from typer._click.exceptions import UsageError
+except ImportError:  # Typer versions using the standalone Click dependency.
+    from click.exceptions import UsageError
+from typer.core import TyperCommand
 from agentguard.management.service import ControlPlane,AccessError
 from agentguard.management.client import Client
+from agentguard.management.credentials import private_file,credential,CredentialError
 
 app=typer.Typer(help='Private control plane and customer-side runner. No managed/shared-hostile execution.')
 
+
+class EnrollmentCommand(TyperCommand):
+    def parse_args(self,ctx,args):
+        try:return super().parse_args(ctx,args)
+        except UsageError:
+            # Click normally echoes unexpected positional values, which could be
+            # a mistakenly pasted enrollment secret. Do not echo parser inputs.
+            raise UsageError('Invalid enrollment arguments; use hidden input or --enrollment-stdin.',ctx) from None
+
 def attempt(fn):
     try:return fn()
+    except CredentialError as error:
+        typer.echo(json.dumps(dict(error=error.code,operation_status=error.operation_status,
+            publication_status=error.publication_status,credential_written=False,recovery_required=error.recovery_required)),err=True)
+        raise typer.Exit(2) from None
     except Exception as error:
         code=error.code if isinstance(error,AccessError) else 'MANAGEMENT_OPERATION_FAILED'
         typer.echo(json.dumps(dict(error=code)),err=True);raise typer.Exit(2) from None
 
 def emit(value):typer.echo(json.dumps(value,ensure_ascii=False,indent=2))
-
-def private_file(path,operation):
-    path=Path(path).absolute()
-    if path.is_symlink() or path.exists():raise FileExistsError('Credential output exists')
-    path.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
-    descriptor=os.open(path,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
-    with os.fdopen(descriptor,'w',encoding='utf-8') as stream:
-        result=operation();stream.write(result['token'] if 'token' in result else result['runner_token'])
-    return {key:value for key,value in result.items() if key not in {'token','runner_token'}}
-
-def credential(path):
-    path=Path(path)
-    if path.is_symlink() or not path.is_file() or path.stat().st_nlink!=1 or path.stat().st_size>512:raise ValueError('Unsafe credential file')
-    if os.name!='nt' and path.stat().st_mode&0o077:raise ValueError('Credential file must be owner-only')
-    value=path.read_text(encoding='utf-8').strip()
-    if not re.fullmatch(r'ag7r?_[A-Za-z0-9_-]{43}',value):raise ValueError('Explicit AgentGuard credential required; provider keys are never accepted')
-    return value
 
 @app.command('init')
 def initialize(state:Path=typer.Option(...,'--state'),owner:str=typer.Option(...,'--owner'),credential_file:Path=typer.Option(...,'--credential-file')):
@@ -60,13 +63,30 @@ def serve(state:Path=typer.Option(...,'--state'),host:str='127.0.0.1',port:int=8
         finally:server.server_close()
     attempt(start)
 
-@app.command('enroll')
-def enroll(server:str=typer.Option(...,'--server'),credential_file:Path=typer.Option(...,'--credential-file')):
-    def exchange():
-        value=getpass.getpass('One-time AgentGuard enrollment (hidden): ')
-        if not re.fullmatch(r'ag7e_[A-Za-z0-9_-]{43}',value):raise ValueError('Explicit enrollment required')
-        return Client(server).request('/api/runner/exchange',dict(enrollment_token=value))
-    result=attempt(lambda:private_file(credential_file,exchange));emit(dict(enrolled=True,credential_written=True,**result))
+@app.command('enroll',cls=EnrollmentCommand)
+def enroll(server:str=typer.Option(...,'--server'),credential_file:Path=typer.Option(...,'--credential-file'),
+    enrollment_stdin:bool=typer.Option(False,'--enrollment-stdin',help='Read one bounded enrollment token from a pipe; never a CLI argument.')):
+    def execute():
+        try:
+            if enrollment_stdin:
+                if sys.stdin.isatty():raise CredentialError('ENROLLMENT_STDIN_REQUIRES_PIPE')
+                value=sys.stdin.read(128).removesuffix('\n').removesuffix('\r')
+            else:
+                with warnings.catch_warnings():
+                    warnings.simplefilter('error',getpass.GetPassWarning)
+                    value=getpass.getpass('One-time AgentGuard enrollment (hidden): ')
+        except (KeyboardInterrupt,EOFError):raise CredentialError('ENROLLMENT_INPUT_CANCELLED') from None
+        except getpass.GetPassWarning:raise CredentialError('ENROLLMENT_HIDDEN_INPUT_UNAVAILABLE') from None
+        if not re.fullmatch(r'ag7e_[A-Za-z0-9_-]{43}',value):raise CredentialError('ENROLLMENT_INPUT_INVALID')
+        client=Client(server)
+        def exchange():
+            try:return client.request('/api/runner/exchange',dict(enrollment_token=value))
+            except AccessError as error:
+                if 400<=error.status<500:raise CredentialError(error.code,'rejected') from None
+                raise CredentialError('ENROLLMENT_EXCHANGE_UNCERTAIN','unknown') from None
+            except Exception:raise CredentialError('ENROLLMENT_EXCHANGE_UNCERTAIN','unknown') from None
+        return private_file(credential_file,exchange)
+    result=attempt(execute);emit(dict(enrolled=True,credential_written=True,**result))
 
 @app.command('runner')
 def runner(server:str=typer.Option(...,'--server'),credential_file:Path=typer.Option(...,'--credential-file'),

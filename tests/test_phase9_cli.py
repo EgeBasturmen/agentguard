@@ -6,6 +6,12 @@ from test_phase7_workflow import setup_project
 
 pytestmark=pytest.mark.integration
 
+
+@pytest.fixture(autouse=True)
+def private_cli_directory(tmp_path):
+    from scripts.sprint1_verification_support import secure_fixture_directory
+    secure_fixture_directory(tmp_path)
+
 def test_operator_backup_restore_cli_no_secret_output_or_overwrite(tmp_path):
     service,token,_=setup_project(tmp_path);archive=tmp_path/'private.agbackup';cli=CliRunner()
     result=cli.invoke(app,['management','backup','--state',str(service.root),'--output',str(archive)])
@@ -17,8 +23,9 @@ def test_operator_backup_restore_cli_no_secret_output_or_overwrite(tmp_path):
     assert result.exit_code==0 and json.loads(result.output)['credentials_revoked'] and token not in result.output
 
 def test_account_provisioning_is_explicit_private_and_never_public_signup(tmp_path):
-    service,token,_=setup_project(tmp_path);owner=tmp_path/'owner.key';owner.write_text(token)
-    if __import__('os').name!='nt':owner.chmod(0o600)
+    from agentguard.management.cli import private_file
+    service,token,_=setup_project(tmp_path);owner=tmp_path/'owner.key'
+    private_file(owner,lambda:dict(token=token))
     target=tmp_path/'new.key'
     result=CliRunner().invoke(app,['management','create-account','--state',str(service.root),'--owner-credential',str(owner),'--user','technical-new-account','--name','Technical fixture','--credential-file',str(target)])
     assert result.exit_code==0 and target.read_text().startswith('ag7_') and target.read_text() not in result.output

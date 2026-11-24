@@ -3,6 +3,12 @@ from typer.testing import CliRunner
 
 pytestmark=pytest.mark.integration
 
+
+@pytest.fixture(autouse=True)
+def private_cli_directory(tmp_path):
+    from scripts.sprint1_verification_support import secure_fixture_directory
+    secure_fixture_directory(tmp_path)
+
 def test_bootstrap_cli_writes_explicit_private_credential_without_printing_it(tmp_path):
     from agentguard.cli.main import app
     state=tmp_path/'control';key=tmp_path/'credentials'/'owner.key'
