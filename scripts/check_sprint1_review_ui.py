@@ -4,13 +4,53 @@ from pathlib import Path
 import tempfile
 import argparse
 import threading
+import re
+from dataclasses import dataclass
 from contextlib import contextmanager
-
-from playwright.sync_api import sync_playwright, expect
 
 from agentguard.management.http import make_server
 from agentguard.management.service import ControlPlane
 from sprint1_verification_support import secure_fixture_directory, FixturePermissionError
+
+
+class ReviewSmokeError(RuntimeError):
+    """Fixed diagnostic codes only; never API bodies, identities or credentials."""
+
+
+@dataclass(frozen=True)
+class ReviewTarget:
+    object_id: str
+    case_id: str
+    revision: int
+    fingerprint: str
+
+
+def _target(item):
+    if not isinstance(item,dict) or not isinstance(item.get('case'),dict):
+        raise ReviewSmokeError('REVIEW_IDENTITY_UNVERIFIED')
+    case=item['case'];identity=item.get('id');case_id=case.get('id');revision=case.get('revision');fingerprint=case.get('fingerprint')
+    if (not isinstance(identity,str) or not re.fullmatch('[0-9a-f]{32}',identity)
+        or not isinstance(case_id,str) or not case_id.strip() or len(case_id)>200
+        or type(revision) is not int or revision<1
+        or not isinstance(fingerprint,str) or not re.fullmatch('[0-9a-f]{64}',fingerprint)):
+        raise ReviewSmokeError('REVIEW_IDENTITY_UNVERIFIED')
+    return ReviewTarget(identity,case_id,revision,fingerprint)
+
+
+def select_review_case(items):
+    if not isinstance(items,list):raise ReviewSmokeError('REVIEW_CASE_LIST_UNVERIFIED')
+    targets=[_target(item) for item in items if isinstance(item,dict) and item.get('ready') is True and item.get('status') in ('draft','reviewed')]
+    if not targets:raise ReviewSmokeError('NO_REVIEWABLE_CASE')
+    if len({target.object_id for target in targets})!=len(targets):
+        raise ReviewSmokeError('REVIEW_IDENTITY_AMBIGUOUS')
+    # API ordering is not selection authority: created timestamps may tie and IDs
+    # are random. Pin both object identity and immutable candidate revision.
+    return min(targets,key=lambda target:(target.case_id,target.revision,target.object_id))
+
+
+def validate_review_target(item,target):
+    if _target(item)!=target or item.get('ready') is not True or item.get('status') not in ('draft','reviewed'):
+        raise ReviewSmokeError('REVIEW_TARGET_CHANGED_OR_UNREADY')
 
 
 @contextmanager
@@ -27,6 +67,7 @@ def fixture_server(service, port):
 
 
 def verify(*, legacy=False, port=0):
+    from playwright.sync_api import sync_playwright, expect
     with tempfile.TemporaryDirectory(prefix='agentguard-sprint1-review-') as directory:
         secure_fixture_directory(directory)
         service = ControlPlane(Path(directory) / 'server')
@@ -67,16 +108,36 @@ def verify(*, legacy=False, port=0):
                 page.locator('#rules').fill(json.dumps([
                     dict(id='goal', text='expect files = {"note.txt":"done"}'),
                     dict(id='tool', text='tool file.write times 1')]))
-                page.locator('#generate button').click()
-                card = page.locator('#cases article').first
+                with page.expect_response(lambda response: response.request.method == 'POST' and response.url.endswith('/generate')) as generated:
+                    page.locator('#generate button').click()
+                if generated.value.status!=200:raise ReviewSmokeError('GENERATION_POST_UNVERIFIED')
+                created={item['id']:item for item in generated.value.json()['cases']}
+                def read_cases(suffix=''):
+                    response=page.request.get(url+'/api/projects/'+project+'/cases'+suffix,headers={'Authorization':'Bearer '+owner['token']})
+                    if response.status!=200:raise ReviewSmokeError('REVIEW_CASE_HTTP_UNVERIFIED')
+                    return response.json()
+                rows=[item for item in read_cases() if item['id'] in created]
+                if len(rows)!=len(created):raise ReviewSmokeError('REVIEW_CASE_LIST_INCOMPLETE')
+                target=select_review_case(rows)
+                if _target(created[target.object_id])!=target:raise ReviewSmokeError('GENERATED_CASE_BINDING_CHANGED')
+                card=page.locator('#cases article').filter(has=page.locator('input[data-case="'+target.object_id+'"]'))
+                expect(card).to_have_count(1)
                 expect(card).to_be_visible()
                 object_id = card.locator('input[data-case]').get_attribute('data-case')
+                if object_id!=target.object_id:raise ReviewSmokeError('REVIEW_CARD_IDENTITY_UNVERIFIED')
+                expect(card.locator('strong')).to_contain_text(target.case_id)
+                def save_review(expected_status=200):
+                    validate_review_target(read_cases('/'+object_id),target)
+                    with page.expect_response(lambda response: response.request.method=='POST' and response.url.endswith('/cases/'+object_id+'/review')) as saved:
+                        card.get_by_role('button',name='İncelemeyi kaydet').click()
+                    if saved.value.status!=expected_status:
+                        raise ReviewSmokeError('REVIEW_POST_STATUS_UNVERIFIED')
                 selectors = card.locator('select')
                 for selector in selectors.all():
                     selector.select_option('confirmed')
                 card.locator('input[type=checkbox]').nth(1).check()
                 card.locator('input[type=checkbox]').nth(2).check()
-                card.get_by_role('button', name='İncelemeyi kaydet').click()
+                save_review()
                 expect(card.locator('strong')).to_contain_text('reviewed')
                 for selector in card.locator('select').all():
                     expect(selector).to_have_value('confirmed')
@@ -87,7 +148,7 @@ def verify(*, legacy=False, port=0):
                 card.locator('select').nth(1).select_option('rejected')
                 card.locator('input[type=checkbox]').nth(1).uncheck()
                 with page.expect_response(lambda response: response.request.method == 'GET' and response.url.endswith('/cases')):
-                    card.get_by_role('button', name='İncelemeyi kaydet').click()
+                    save_review()
                 expect(card.locator('select').nth(0)).to_have_value('unknown')
                 expect(card.locator('select').nth(1)).to_have_value('rejected')
                 expect(card.locator('input[type=checkbox]').nth(1)).not_to_be_checked()
@@ -99,7 +160,7 @@ def verify(*, legacy=False, port=0):
                     selector.select_option('confirmed')
                 card.locator('input[type=checkbox]').nth(1).check()
                 with page.expect_response(lambda response: response.request.method == 'GET' and response.url.endswith('/cases')):
-                    card.get_by_role('button', name='İncelemeyi kaydet').click()
+                    save_review()
                 before = service.case(owner['token'], project, object_id)['review']
                 if not legacy:
                     # Another tab saved a newer record; this page must not overwrite it.
@@ -107,7 +168,7 @@ def verify(*, legacy=False, port=0):
                         decisions=before['decisions'], fixture=True, classification=True,
                         notes='Independent review note from another tab',
                         expected_review_fingerprint=before['fingerprint'])
-                    card.get_by_role('button', name='İncelemeyi kaydet').click()
+                    save_review(409)
                     expect(page.locator('#status')).to_contain_text('REVIEW_CHANGED_RELOAD')
                     assert service.case(owner['token'], project, object_id)['review'] == before
                     page.reload()
@@ -116,7 +177,7 @@ def verify(*, legacy=False, port=0):
                     expect(page.locator('#account-info')).to_contain_text('workspace_id')
                     expect(card.locator('strong')).to_contain_text('reviewed')
                 with page.expect_response(lambda response: response.request.method == 'GET' and response.url.endswith('/cases')):
-                    card.get_by_role('button', name='İncelemeyi kaydet').click()
+                    save_review()
                 assert service.case(owner['token'], project, object_id)['review'] == before
                 page.reload()
                 page.locator('#token').fill(owner['token'])
@@ -149,7 +210,8 @@ def verify(*, legacy=False, port=0):
     return dict(status='passed', real_chromium=True, isolated_state=True,
                 review_rehydrated=True, reload_preserved=True, repeat_save_preserved=True,
                 origin=url, permissions_verified=True, approval_verified=True, mixed_decisions_preserved=True, stale_review_blocked=not legacy,
-                frozen_invalidation_verified=True, legacy_server_compatible=legacy, live_api_calls=0)
+                frozen_invalidation_verified=True, legacy_server_compatible=legacy, live_api_calls=0,
+                ready_case_selection_verified=True, case_identity_revision_pinned=True)
 
 
 if __name__ == '__main__':
@@ -165,6 +227,9 @@ if __name__ == '__main__':
         result = dict(current=verify(port=args.port), legacy=verify(legacy=True))
     except FixturePermissionError as error:
         print(json.dumps(dict(status='failed',stage=error.stage,category=error.category,exit_code=error.exit_code)))
+        raise SystemExit(2) from None
+    except ReviewSmokeError as error:
+        print(json.dumps(dict(status='failed',stage='review_smoke',code=str(error))))
         raise SystemExit(2) from None
     if args.result is not None:
         args.result.parent.mkdir(parents=True, exist_ok=True)
