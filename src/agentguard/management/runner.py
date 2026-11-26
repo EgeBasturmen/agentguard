@@ -1,9 +1,6 @@
 """Customer-side execution. The management server never imports/builds customer agent code."""
 from pathlib import Path
 import tempfile
-import json
-import os
-import re
 import threading
 import time
 from agentguard.generation.repository import ScenarioRepository,Snapshot
@@ -53,41 +50,20 @@ def execute_spec(spec,source_root,*,cancel_event=None,allow_external=False,allow
 class PrivateRunner:
     def __init__(self,client,*,source_root,cache_root,allow_external=False,allow_live_models=False):
         self.client=client;self.source_root=Path(source_root).resolve(strict=True);self.cache=Path(cache_root).absolute();self.allow_external=allow_external;self.allow_live_models=allow_live_models
-        if self.cache.is_symlink():raise ValueError('Symlink cache is forbidden')
-        self.cache.mkdir(parents=True,exist_ok=True,mode=0o700)
-        marker=self.cache/'.agentguard-runner-cache'
-        if not marker.exists():
-            if any(self.cache.iterdir()):raise ValueError('Use a new empty directory for the private evidence cache')
-            with marker.open('x',encoding='utf-8') as stream:stream.write('private-runner-cache-v1')
-        elif marker.is_symlink() or marker.read_text(encoding='utf-8')!='private-runner-cache-v1':raise ValueError('Invalid private cache marker')
+        from agentguard.management.cache import EvidenceCache
+        self.evidence=EvidenceCache(self.cache,server=client.url,credential=client.token)
 
     def _cache(self,claim,result):
-        from agentguard.management.store import check_id,encode
-        folder=self.cache/check_id(claim['project'])
-        if folder.is_symlink():raise ValueError('Invalid cache folder')
-        folder.mkdir(mode=0o700,exist_ok=True)
-        path=folder/(check_id(claim['id'])+'.json')
-        descriptor=os.open(path,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
-        with os.fdopen(descriptor,'w',encoding='utf-8') as stream:stream.write(encode(result))
-        meta=folder/(claim['id']+'.meta.json')
-        descriptor=os.open(meta,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
-        with os.fdopen(descriptor,'w',encoding='utf-8') as stream:json.dump(dict(expires=time.time()+min(30,claim['spec'].get('retention_days',7))*86400),stream)
+        self.evidence.complete(claim,result)
 
     def purge_cache(self):
-        for folder in self.cache.iterdir():
-            if not re.fullmatch('[0-9a-f]{32}',folder.name) or folder.is_symlink() or not folder.is_dir():continue
-            for meta in folder.glob('*.meta.json'):
-                if meta.is_symlink() or not re.fullmatch('[0-9a-f]{32}\\.meta\\.json',meta.name) or meta.stat().st_size>1024:continue
-                try:expires=json.loads(meta.read_text(encoding='utf-8'))['expires']
-                except (ValueError,KeyError):continue
-                if type(expires) not in {int,float} or expires>time.time():continue
-                evidence=folder/(meta.name[:32]+'.json')
-                if evidence.is_symlink():raise ValueError('Unsafe private evidence')
-                if evidence.exists():evidence.unlink()
-                meta.unlink()
+        return self.evidence.purge()
 
     def run_once(self):
-        self.purge_cache();claim=self.client.request('/api/runner/claim',{})
+        with self.evidence.session():return self._run_once()
+
+    def _run_once(self):
+        self.purge_cache();self.evidence.ensure_ready();claim=self.client.request('/api/runner/claim',{})
         if claim is None:return None
         cancel=threading.Event();stop=threading.Event();deadline=time.monotonic()+claim['max_seconds']
         def denied():
@@ -109,10 +85,14 @@ class PrivateRunner:
         thread=threading.Thread(target=heartbeat,daemon=True);thread.start()
         try:
             if cancel.is_set() or time.monotonic()>=deadline:return denied()
+            self.evidence.begin(claim)
+            if cancel.is_set() or time.monotonic()>=deadline:return denied()
             try:result=execute_spec(claim['spec'],self.source_root,cancel_event=cancel,allow_external=self.allow_external,allow_live_models=self.allow_live_models)
             except AccessError as error:
                 result=dict(failure=error.code if error.code in {'SOURCE_VERSION_MISMATCH','RUNNER_EXTERNAL_GRANT_REQUIRED'} else 'RUNNER_EXECUTION_ERROR')
             except Exception:result=dict(failure='RUNNER_EXECUTION_ERROR')
             self._cache(claim,result)
-            return self.client.request('/api/runner/finish',dict(job_id=claim['id'],lease=claim['lease'],report=result))
+            reply=self.client.request('/api/runner/finish',dict(job_id=claim['id'],lease=claim['lease'],report=result))
+            self.evidence.acknowledge(claim,result,reply)
+            return reply
         finally:stop.set();thread.join(timeout=12)

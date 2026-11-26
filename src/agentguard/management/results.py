@@ -101,7 +101,7 @@ class Results:
             existing=db.execute('SELECT * FROM jobs WHERE id=? AND project=? AND runner=?',(check_id(job_id),runner['project'],runner['id'])).fetchone()
             if existing and existing['state']=='completed':
                 if not isinstance(lease,str) or not hmac.compare_digest(existing['lease'] or '',token_hash(lease)) or existing['result_hash']!=report_hash:raise AccessError('RESULT_CONFLICT',409)
-                return self._job_view(existing)
+                return dict(self._job_view(existing),delivery_accepted=True,report_digest=report_hash)
             _,job=self._leased(db,runner_token,job_id,lease);spec=json.loads(job['spec'])
             reason=self._lifecycle_error(job,cancellation=False)
             if reason:
@@ -109,7 +109,7 @@ class Results:
                 return self._job_view(db.execute('SELECT * FROM jobs WHERE id=?',(job_id,)).fetchone())
             if set(report)=={'failure'}:
                 if report['failure'] not in {'RUNNER_EXECUTION_ERROR','SOURCE_VERSION_MISMATCH','RUNNER_EXTERNAL_GRANT_REQUIRED'}:raise AccessError('INVALID_RUNNER_FAILURE',400)
-                self._fail_job(db,job,report['failure']);return self._job_view(db.execute('SELECT * FROM jobs WHERE id=?',(job_id,)).fetchone())
+                self._fail_job(db,job,report['failure']);return dict(self._job_view(db.execute('SELECT * FROM jobs WHERE id=?',(job_id,)).fetchone()),delivery_accepted=True,report_digest=report_hash)
             decision,runs,cleanup=self._evaluate_report(spec,report)
             # Fence against review withdrawal and cancellation while customer execution was running.
             reason=self._admission_error(db,job)
@@ -144,7 +144,7 @@ class Results:
             model_settled=not configured or len(runs)==len(spec['cases']) and all(run.model_evidence is not None and run.model_evidence.get('status')=='passed' for run in runs)
             if model_settled:db.execute('UPDATE jobs SET reserved_model_tokens=0,reserved_model_cost=0 WHERE id=?',(job_id,))
             self._job_event(db,job_id,job['project'],'completed')
-            return self._job_view(db.execute('SELECT * FROM jobs WHERE id=?',(job_id,)).fetchone())
+            return dict(self._job_view(db.execute('SELECT * FROM jobs WHERE id=?',(job_id,)).fetchone()),delivery_accepted=True,report_digest=report_hash)
 
     def set_data_policy(self,token,project,*,retention_days,redact_fields):
         if type(retention_days) is not int or not 1<=retention_days<=30 or not isinstance(redact_fields,list) or len(redact_fields)>50 or any(not isinstance(f,str) or not 1<=len(f)<=100 for f in redact_fields):raise AccessError('INVALID_DATA_POLICY',400)

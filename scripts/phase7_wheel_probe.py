@@ -13,7 +13,12 @@ def verify(docker=False):
     from agentguard.management.runner import PrivateRunner
     from agentguard.execution.agent_spec import AgentLaunchSpec
     with tempfile.TemporaryDirectory(prefix='agentguard-management-wheel-') as directory:
-        root=Path(directory);source=root/'source';source.mkdir()
+        root=Path(directory)
+        from agentguard.management import credentials as private_permissions
+        import os
+        if os.name=='nt':private_permissions._windows_security(root,'harden')
+        else:root.chmod(0o700)
+        source=root/'source';source.mkdir()
         (source/'agent.py').write_text("class Agent:\n    def run(self,task,sandbox):\n        sandbox.call('file.write',{'filename':'note.txt','content':'done'})\n        return 'done'\n",encoding='utf-8')
         service=ControlPlane(root/'state');owner=service.bootstrap('synthetic-wheel-operator')
         token=owner['token'];project=service.create_project(token,'Wheel fixture')['id']

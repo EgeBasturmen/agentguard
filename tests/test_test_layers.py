@@ -42,4 +42,4 @@ def test_unknown_markers_are_collection_errors(tmp_path):
         cwd=root, capture_output=True, text=True, timeout=30,
     )
     assert result.returncode == 2
-    assert "not_registered" in result.stdout + result.stderr
+    assert "not_registered" in result.stdout + result.stderr, result.stdout + result.stderr

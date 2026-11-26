@@ -8,7 +8,12 @@ def verify(docker=False):
     from agentguard.management.service import ControlPlane,AccessError
     from agentguard.management.operations import backup,restore
     with tempfile.TemporaryDirectory(prefix='agentguard-operations-wheel-') as directory:
-        root=Path(directory);service=ControlPlane(root/'state');owner=service.bootstrap('synthetic-wheel-owner');token=owner['token']
+        root=Path(directory)
+        from agentguard.management import credentials as private_permissions
+        import os
+        if os.name=='nt':private_permissions._windows_security(root,'harden')
+        else:root.chmod(0o700)
+        service=ControlPlane(root/'state');owner=service.bootstrap('synthetic-wheel-owner');token=owner['token']
         project=service.create_project(token,'Operations fixture')['id']
         assert service.onboarding_funnel(token,project)['verified_current_runs']==0
         if docker:

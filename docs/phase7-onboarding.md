@@ -64,6 +64,12 @@ agentguard management runner --server http://127.0.0.1:8765 --credential-file .a
 ```
 
 Runner cache başlangıçta yeni/boş olmalıdır. Canonical kanıt bu özel cache’te kalır.
+S2-03 cache'i runner credential/origin bağıyla korur; report ve teslim metadata'sı
+tek atomik kayıttadır. Pending, incomplete veya corrupt kayıt varsa runner otomatik
+yeni job almaz; TTL bunları sessizce silmez. Eski V1 cache'leri otomatik dönüştürülmez.
+Canonical `job.json` export'u ile özel `job.entry.json` dosyasını karıştırmayın;
+entry dosyası lease içerir ve paylaşılmamalıdır. Recovery ve orphan staging kuralları:
+[S2-03 private cache](s2-03-private-cache.md). Otomatik upload retry bu profilde yoktur.
 Her runner için ayrı cache kullanın; paylaşılan cache desteklenmez. Windows'ta güvenilen,
 tercihen ayrı bir OS hesabı kullanın.
 İşletim sistemi kullanıcısı, controller operatörü ve custom host adapter’lar güvenilir

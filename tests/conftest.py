@@ -1,5 +1,13 @@
 import pytest
 
+
+@pytest.fixture(autouse=True)
+def private_runner_fixture_root(request,tmp_path):
+    # Harden only test-owned temporary roots before exercising production cache ACLs.
+    if request.node.path.name in {'test_phase7_docker.py','test_phase9_docker.py','test_s2_dispatch.py','test_s2_dispatch_docker.py','test_s2_cache_docker.py'}:
+        from scripts.sprint1_verification_support import secure_fixture_directory
+        secure_fixture_directory(tmp_path)
+
 from agentguard.core.scenario import Scenario
 from agentguard.runner.runner import ScenarioRunner
 from agentguard.sandbox.generic import GenericSandbox

@@ -16,7 +16,12 @@ def verify(output,operations=False):
     if output.exists() or output.is_symlink():raise FileExistsError('Verification output exists')
     output.parent.mkdir(parents=True,exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='agentguard-browser-fixture-') as directory:
-        root=Path(directory);source=root/'source';source.mkdir()
+        root=Path(directory)
+        from agentguard.management import credentials as private_permissions
+        import os
+        if os.name=='nt':private_permissions._windows_security(root,'harden')
+        else:root.chmod(0o700)
+        source=root/'source';source.mkdir()
         (source/'agent.py').write_text("class Agent:\n    def run(self,task,sandbox):\n        sandbox.call('file.write',{'filename':'note.txt','content':'done'})\n        return '<script>globalThis.agentguardInjected=1</script>'\n",encoding='utf-8')
         _,sha=AgentLaunchSpec(reference='agent:Agent',source_dir=source).sources()
         service=ControlPlane(root/'control');owner=service.bootstrap('technical-fixture-operator')
