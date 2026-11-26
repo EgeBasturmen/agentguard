@@ -121,24 +121,62 @@ class Queue:
             if db.execute("SELECT 1 FROM jobs WHERE runner=? AND state IN ('leased','running')",(runner['id'],)).fetchone():return None
             job=db.execute("SELECT * FROM jobs WHERE project=? AND state='queued' ORDER BY created,id LIMIT 1",(runner['project'],)).fetchone()
             if job is None:return None
+            reason=self._admission_error(db,job)
+            if reason:
+                self._fail_job(db,job,reason)
+                # No lease/spec was delivered. Unknown execution reservations are
+                # never released by the heartbeat/finish paths below.
+                db.execute("UPDATE jobs SET cleanup='not_required',reserved_seconds=0,reserved_bytes=0,reserved_model_tokens=0,reserved_model_cost=0 WHERE id=?",(job['id'],))
+                return None
+            self._runner(db,runner_token)  # Expiry can advance during admission reads.
             value=secrets.token_urlsafe(32);now=self.clock()
             db.execute("UPDATE jobs SET state='leased',runner=?,lease=?,lease_until=?,started=?,updated=?,cleanup='unverified' WHERE id=? AND state='queued'",(runner['id'],token_hash(value),now+30,now,now,job['id']))
             self._job_event(db,job['id'],job['project'],'leased')
             return dict(id=job['id'],project=job['project'],lease=value,lease_seconds=30,max_seconds=job['reserved_seconds'],spec=json.loads(job['spec']))
 
     def _leased(self,db,runner_token,job_id,lease):
-        runner=self._runner(db,runner_token);self._reconcile(db)
+        runner=self._runner(db,runner_token)
         job=db.execute('SELECT * FROM jobs WHERE id=? AND project=? AND runner=?',(check_id(job_id),runner['project'],runner['id'])).fetchone()
         if job is None:raise AccessError('NOT_FOUND',404)
         if job['state'] not in {'leased','running'} or not isinstance(lease,str) or job['lease'] is None or not hmac.compare_digest(job['lease'],token_hash(lease)):raise AccessError('STALE_LEASE',409)
         return runner,job
 
+    def _admission_error(self,db,job):
+        from agentguard.management.auth import ROLES
+        try:
+            project=db.execute('SELECT workspace FROM projects WHERE id=?',(job['project'],)).fetchone()
+            if project is None:return 'DISPATCH_ADMISSION_UNVERIFIED'
+            role=self._current_role(db,dict(workspace=project['workspace'],project=None,user=job['creator']),job['project'])
+            if 'run:write' not in ROLES.get(role,()):return 'DISPATCH_CREATOR_AUTHORITY_REVOKED'
+            stored=json.loads(job['spec']);current=self._suite_spec(db,job['project'],stored['suite_id'])
+            if any(digest(current[key])!=digest(stored[key]) for key in ('snapshot','cases','connection')):
+                return 'DISPATCH_SPEC_CHANGED'
+        except (AccessError,ValueError,KeyError,TypeError):return 'DISPATCH_ADMISSION_UNVERIFIED'
+        return None
+
+    def _lifecycle_error(self,job,*,cancellation=True):
+        now=self.clock()
+        if job['started'] is None or now>=job['started']+job['reserved_seconds']:return 'JOB_DEADLINE_CLEANUP_UNVERIFIED'
+        if job['lease_until'] is None or now>=job['lease_until']:return 'LEASE_LOST_EXECUTION_AND_CLEANUP_UNVERIFIED'
+        if cancellation and job['cancel']:return 'RUN_CANCELLED'
+        return None
+
     def heartbeat(self,runner_token,job_id,lease):
         with self.db() as db:
             _,job=self._leased(db,runner_token,job_id,lease)
+            reason=self._lifecycle_error(job) or self._admission_error(db,job)
+            if not reason:
+                self._runner(db,runner_token)
+                reason=self._lifecycle_error(job)
+            if reason:
+                if job['state']=='running' and reason not in {'JOB_DEADLINE_CLEANUP_UNVERIFIED','LEASE_LOST_EXECUTION_AND_CLEANUP_UNVERIFIED'}:
+                    # Cancellation requests stop work best-effort. Preserve the
+                    # valid lease long enough to accept a real cleanup receipt.
+                    decision=GateDecision(decision_status='unverified',reasons=[reason]).model_dump(mode='json')
+                    db.execute('UPDATE jobs SET cancel=1,decision=?,updated=? WHERE id=?',(encode(decision),self.clock(),job_id))
+                else:self._fail_job(db,job,reason)
+                return dict(cancel=True,lease_seconds=0)
             deadline=job['started']+job['reserved_seconds']
-            if deadline<=self.clock():
-                self._fail_job(db,job,'JOB_DEADLINE_CLEANUP_UNVERIFIED');return dict(cancel=True,lease_seconds=0)
             db.execute("UPDATE jobs SET state='running',lease_until=?,updated=? WHERE id=?",(min(self.clock()+30,deadline),self.clock(),job_id))
             return dict(cancel=bool(job['cancel']),lease_seconds=30)
 

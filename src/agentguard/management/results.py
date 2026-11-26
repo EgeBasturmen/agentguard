@@ -103,16 +103,22 @@ class Results:
                 if not isinstance(lease,str) or not hmac.compare_digest(existing['lease'] or '',token_hash(lease)) or existing['result_hash']!=report_hash:raise AccessError('RESULT_CONFLICT',409)
                 return self._job_view(existing)
             _,job=self._leased(db,runner_token,job_id,lease);spec=json.loads(job['spec'])
+            reason=self._lifecycle_error(job,cancellation=False)
+            if reason:
+                self._fail_job(db,job,reason)
+                return self._job_view(db.execute('SELECT * FROM jobs WHERE id=?',(job_id,)).fetchone())
             if set(report)=={'failure'}:
                 if report['failure'] not in {'RUNNER_EXECUTION_ERROR','SOURCE_VERSION_MISMATCH','RUNNER_EXTERNAL_GRANT_REQUIRED'}:raise AccessError('INVALID_RUNNER_FAILURE',400)
                 self._fail_job(db,job,report['failure']);return self._job_view(db.execute('SELECT * FROM jobs WHERE id=?',(job_id,)).fetchone())
             decision,runs,cleanup=self._evaluate_report(spec,report)
             # Fence against review withdrawal and cancellation while customer execution was running.
-            try:self._suite_spec(db,job['project'],spec['suite_id'])
-            except Exception:decision=GateDecision(decision_status='unverified',reasons=['SUITE_APPROVAL_WITHDRAWN'])
+            reason=self._admission_error(db,job)
+            if reason:decision=GateDecision(decision_status='unverified',reasons=['SUITE_APPROVAL_WITHDRAWN',reason])
             if job['cancel']:decision=GateDecision(decision_status='unverified',reasons=['RUN_CANCELLED'])
-            if self.clock()>job['started']+job['reserved_seconds']:
-                self._fail_job(db,job,'JOB_DEADLINE_CLEANUP_UNVERIFIED');return self._job_view(db.execute('SELECT * FROM jobs WHERE id=?',(job_id,)).fetchone())
+            reason=self._lifecycle_error(job,cancellation=False)
+            if reason:
+                self._fail_job(db,job,reason);return self._job_view(db.execute('SELECT * FROM jobs WHERE id=?',(job_id,)).fetchone())
+            self._runner(db,runner_token)  # Authority may expire during report validation.
             decision.authorizes_release=False
             project=db.execute('SELECT * FROM projects WHERE id=?',(job['project'],)).fetchone()
             view=redact(dict(schema_version=1,kind='agentguard.private-runner-presentation',job=job_id,

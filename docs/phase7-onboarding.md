@@ -159,6 +159,12 @@ Orphan staging için güvenli operatör temizliği ayrı, açık onaylı bir iş
 
 ## 2. Test et
 
+Queued job, çalıştırılmadan önce güncel approval/revision/source/suite ve yetki
+kontrolünden tekrar geçer. Built-in runner ilk heartbeat ACK'ini bekler; admission
+reddinde işi otomatik yeniden çalıştırmaz. Geçerli cleanup raporu BLOCK ile birlikte
+görülebilir. ACK sonrası revoke/cancellation dış etkileri kesin geri alamaz.
+Ayrıntılı sınırlar: [dispatch admission profili](s2-02-dispatch-admission.md).
+
 Görevi, başlangıç fixture’ını, başarı ve yasak davranış kurallarını girin. Örnek fixture
 `{"files":{"note.txt":"draft"}}`, kural metni `expect files.note\.txt = "done"`.
 JSON kural dizisinde backslash’i `\\` ile encode edin. Bunlar sizin bağımsız

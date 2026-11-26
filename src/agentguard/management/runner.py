@@ -15,6 +15,7 @@ from agentguard.management.objects import safe_runtime
 from agentguard.management.store import AccessError
 
 def execute_spec(spec,source_root,*,cancel_event=None,allow_external=False,allow_live_models=False):
+    if cancel_event is not None and cancel_event.is_set():raise AccessError('RUNNER_EXECUTION_CANCELLED',409)
     root=Path(source_root).resolve(strict=True)
     snapshot=Snapshot.model_validate(spec['snapshot']);connection=spec['connection']
     for member in spec['cases']:
@@ -39,10 +40,12 @@ def execute_spec(spec,source_root,*,cancel_event=None,allow_external=False,allow
         if spec['kind']=='preflight':
             checks=[]
             for member in spec['cases']:
+                if cancel_event is not None and cancel_event.is_set():raise AccessError('RUNNER_EXECUTION_CANCELLED',409)
                 case=Candidate.model_validate(member['case']);result=run_integration_plan(IntegrationPlan.model_validate(case.plan()),base_dir=root,preflight_only=True)
                 checks.append(dict(case_id=case.id,supported=result.supported,issues=result.issues,coverage_gaps=result.coverage_gaps))
             return dict(preflight=dict(schema_version=1,checks=checks,agent_invoked=False,verification_level='configuration/source-pin/preflight; not behavior'))
         if spec['kind']!='suite':raise AccessError('UNKNOWN_JOB_KIND',400)
+        if cancel_event is not None and cancel_event.is_set():raise AccessError('RUNNER_EXECUTION_CANCELLED',409)
         execution=SuiteRunner().run(repository,snapshot,base_dir=root,cancel_event=cancel_event)
         return dict(execution=execution.model_dump(mode='json'))
 
@@ -87,16 +90,25 @@ class PrivateRunner:
         self.purge_cache();claim=self.client.request('/api/runner/claim',{})
         if claim is None:return None
         cancel=threading.Event();stop=threading.Event();deadline=time.monotonic()+claim['max_seconds']
+        def denied():
+            # Local operational summary, never a forged server completion/cleanup receipt.
+            return dict(id=claim['id'],project=claim['project'],state='error',gate_decision='BLOCK',cleanup_status='unverified',authorizes_release=False,assurance='runner pre-execution fence denied; consult server job')
+        def permitted(reply):
+            return isinstance(reply,dict) and reply.get('cancel') is False and type(reply.get('lease_seconds')) is int and 0<reply['lease_seconds']<=30
+        # Existing heartbeat is the start fence; a background thread is not an ACK.
+        try:
+            if not permitted(self.client.request('/api/runner/heartbeat',dict(job_id=claim['id'],lease=claim['lease']))):return denied()
+        except Exception:return denied()
         def heartbeat():
-            while not stop.is_set():
+            while not stop.wait(2):
                 if time.monotonic()>=deadline:cancel.set();return
                 try:
                     result=self.client.request('/api/runner/heartbeat',dict(job_id=claim['id'],lease=claim['lease']))
-                    if result['cancel']:cancel.set()
+                    if not permitted(result):cancel.set();return
                 except Exception:cancel.set();return
-                if stop.wait(2):return
         thread=threading.Thread(target=heartbeat,daemon=True);thread.start()
         try:
+            if cancel.is_set() or time.monotonic()>=deadline:return denied()
             try:result=execute_spec(claim['spec'],self.source_root,cancel_event=cancel,allow_external=self.allow_external,allow_live_models=self.allow_live_models)
             except AccessError as error:
                 result=dict(failure=error.code if error.code in {'SOURCE_VERSION_MISMATCH','RUNNER_EXTERNAL_GRANT_REQUIRED'} else 'RUNNER_EXECUTION_ERROR')
