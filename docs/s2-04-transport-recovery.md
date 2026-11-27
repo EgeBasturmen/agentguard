@@ -28,6 +28,11 @@ denenmez. Authentication, TLS doğrulama, bozuk/protokol dışı cevap, integrit
 revocation ve kabul edilmemiş stale lease kalıcı hatadır. Retry tükenirse güvenli
 CLI hata özeti `pending_upload` bildirir ve evidence korunur; başarı uydurulmaz.
 Default transport DNS bekleme, connect, TLS, header ve body için deadline uygular.
+Bağlantı native socket timeout'u ile sınırlıdır; bağlı TCP/TLS I/O nonblocking
+çalışır ve kalan deadline'ı en çok 25 ms'lik select bekleyişlerinde tekrar kontrol
+eder. Windows'ta başka handle'dan shutdown timed read'i hemen uyandırmayabilir;
+deadline garantisi bu davranışa bağlı değildir. TLS handshake aynı deadline içindedir;
+sertifika zinciri ve hostname doğrulaması kapatılmaz.
 OS DNS görevi iptal edilemez; daemon resolver'ın sonucu deadline sonrasında yeni
 bağlantı kurmaz. Güvenilen özel opener/client uygulamaları kendi transport sınırlarından
 sorumludur. Hiçbir hata gövdesi veya credential teşhis çıktısına taşınmaz.
@@ -84,7 +89,7 @@ Değişen kaynaklar: `management/cli.py`, `client.py`, `delivery.py`, `operation
 dosya vardır. Queue şeması, credential publication, mevcut test beklentileri ve
 workflow değiştirilmez. Yeni integration/Docker marker'ları mevcut CI keşfine dahildir.
 
-## Yerel doğrulama (27 Kasım 2026)
+## İlk yerel doğrulama (27 Kasım 2026; a3a3f2b öncesi)
 
 Son kaynakla unit/integration: **951 passed**, gerçek Docker: **84 passed**;
 failure/error/skip yok. Önceki doğrulanmış JUnit case kimlikleriyle karşılaştırmada
@@ -116,3 +121,81 @@ Yerel sonuçlar Windows
 Server 2022 / Python 3.10–3.14 CI matrix doğrulaması yerine sunulmaz. Canlı state,
 credential, cache, signing key, snapshot/backup ve koruyucu gözlemci değiştirilmedi;
 ücretli API çağrısı yapılmadı. S2-05 başlatılmadı.
+
+## İlk CI ve transport düzeltmesi
+
+`a3a3f2b9f7a8edd5e00289c0cd585d0e48361386` için
+[CI 45926523434](https://github.com/EgeBasturmen/agentguard/actions/runs/45926523434)
+9 başarılı / 4 başarısız job ile bitti. Windows 3.12'de 15, 3.13'te 5, 3.14'te
+3 integration failure vardı; Phase 1 gate doğru şekilde başarısız oldu. Bunlar
+S2-04 kapanış kanıtı sayılmaz. Ubuntu 3.10–3.14, Windows 3.10/3.11 ve Docker geçti.
+
+23 failure'ın 20'si `elapsed < 2 AND server_received == expected` birleşik
+assert'inde, üçü non-finish RPC için `server_received == 1` assert'indeydi.
+Eski log birleşik koşulun hangi tarafının bozulduğunu kaydetmez. JUnit süresi setup
+ve teardown içerir; bu süre RPC elapsed yerine kullanılamaz. CI'daki her failure'ı
+yalnız scheduling, Python sürümü veya DNS olarak etiketlemek için kanıt yoktur.
+
+Kontrollü DNS gecikmesi, normal iki client attempt'in sıfır server receive ile
+sonlanabileceğini gerçek yerel HTTP ile yeniden üretti. Non-finish çağrılarda da
+tek client attempt / sıfır receive geçerliydi; pending evidence korundu.
+Attempt, receive ve kabul aynı olay değildir. Düzeltilen testler bunları ve RPC
+elapsed/deadline/hata kategorisini ayrı kaydeder; secret, lease, body, exception
+metni veya tam credential path'i assertion mesajına eklenmez.
+
+Yanıt sınıflandırma testleri üretimin mevcut 3s request / 15s geçiş profilinde
+gerçek HTTP cevabının gelmesini ve beklenen kategoriyi zorunlu tutar. Stall,
+partial header ve partial body fixture'ları event ile durur; kısa sleep'in
+timeout'tan önce/sonra bitmesine güvenilmez. Önceki kısa sınırlar kaldırılmaz:
+ayrı DNS/connect/TLS/header/body testleri 50 ms ve 3s mantıksal deadline'ı faz
+bariyerinden sonra tetikler. Gerçek timer ile DNS ve TLS stall testleri ayrıca
+çalışır. Connect fazındaki kernel timeout kontrollü socket alt sınıfıyla enjekte
+edilir; bu tek başına her ağ/OS için fiziksel connect süresi garantisi değildir.
+Diğer fazlarda gerçek TCP, TLS ve HTTP I/O kullanılır; gerçek HTTP testleri mock
+yanıtlarla değiştirilmez. Geçerli TLS'de 1 MiB POST/response tam olarak doğrulanır;
+güvenilmeyen sertifika ve hostname uyumsuzluğu bir attempt ile kalıcı ret verir.
+
+Ayrı üretim kusuru: Windows socketpair deneyinde duplicate shutdown, original
+shutdown ve close timed read'i hemen kesmedi. Eski deadline kodunun TLS/header/body
+fazlarında native 3s socket timeout'unu bekleyebildiği, explicit expiry sonrası
+1s içinde dönme testlerinin üçünde failure ile kanıtlandı. Nonblocking deadline
+polling düzeltmesi sonrası bu testler geçti. Bu bulgu tarihsel 23 failure'ın
+tamamının nedeni olarak sunulmaz. Production request/total/retry/backoff değerleri
+artırılmadı; admission, receipt, cache publication ve queue şeması değiştirilmedi.
+
+Yeni test yardımcısı `tests/s2_transport_support.py`, sdist'ten test çalıştırmanın
+bozulmaması için MANIFEST'e açıkça eklenir. OpenSSL yalnız geçici test sertifikası
+üretir; anahtar testin owner-only geçici dizininde kalır, commit veya log'a yazılmaz.
+Windows'ta Git'in OpenSSL'i, Linux'ta sistem OpenSSL'i kullanılır; bulunamazsa
+skip/xfail yerine test fail-closed olur.
+
+### Düzeltmenin yerel kabul kanıtları
+
+Son kaynakla **970 unit/integration + 84 gerçek Docker** testi geçti; JUnit
+failure/error/skip sıfırdır. İlk S2-04 kaydındaki 951 ve 84 case kimliği korunur;
+19 yeni integration case eklenir. S2-04 integration profili artık 76 case'tir,
+ilgili Docker profili dört case olarak korunur. Son kayıtlar
+`artifacts/s2-04-revision-all.xml` ve `artifacts/s2-04-revision-docker.xml`.
+
+Transport dosyasının 40 case'i normal, bir ve iki düşük öncelikli test CPU worker'ı
+altında ayrı ayrı geçti: **120/120**. Yük worker'ları yalnız testin kendi process'leridir
+ve stop event'iyle sonlandırılmıştır. Native Windows fixture ACL **13/13**;
+production cache/credential izin testleri geniş suite içinde ayrıca geçti.
+Yerelde desteklenen Python 3.11 ile çalışıldı; yerel sonuçlar 3.10–3.14 matrix
+kanıtı yerine kullanılmaz. Yeni CI sonucu commit sonrasında ayrı doğrulanmalıdır.
+
+İzole sdist'ten wheel build başarılı; sdist yardımcısı ve wheel üretim kaynakları
+kontrol edildi. Kurulu wheel üzerinde Linux/POSIX cache/publication/recovery/TLS
+profili **140/140** geçti; farklı UID okuması reddedildi. Sentetik restore integrity,
+schema, review/source fingerprint ve frozen suite pin kontrolleri geçti. Bu kabul
+canlı kullanıcı backup'ı, ücretli LLM veya bağımsız dış pilot kanıtı değildir.
+Güncel wheel'in checkout dışındaki runtime-only Docker/Chromium probu ve
+current/legacy review UI de geçti: `artifacts/s2-04-revision-current-wheel.json`,
+`artifacts/s2-04-revision-review-ui.json`. Model/pilot kanıt bayrakları false ve
+ücretli API çağrısı sıfır olarak korunur.
+
+Düzeltmenin Git kapsamı beş dosyadır: `rpc_deadline.py`,
+`tests/test_s2_delivery_transport.py`, `tests/s2_transport_support.py`,
+`MANIFEST.in` ve bu belge. Production retry/deadline değerleri, finish protokolü,
+credential publication, admission ve queue şeması değiştirilmez. S2-05 kapsamına
+geçilmez. Custom transport ve OS DNS sınırlamaları önceki profille aynıdır.
