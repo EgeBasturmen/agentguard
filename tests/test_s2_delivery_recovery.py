@@ -19,16 +19,25 @@ def private_fixture(tmp_path):
 
 def policy():return RecoveryPolicy(max_attempts=3,total_seconds=3,request_timeout=.5,base_delay=.02,max_delay=.03)
 
+def claimed_case_object(service,owner,project,claim):
+    members=claim['spec']['cases']
+    assert len(members)==1,'ONE_PINNED_CASE_FIXTURE_REQUIRED'
+    case=members[0]['case'];pin=tuple(case[k] for k in ('id','revision','fingerprint'))
+    matches=[row for row in service.objects(owner,project,'case') if tuple(row['case'][k] for k in ('id','revision','fingerprint'))==pin]
+    assert len(matches)==1,json.dumps(dict(category='CLAIM_CASE_BINDING_UNVERIFIED',matches=len(matches),expected=1))
+    return matches[0]['id']
+
 @pytest.mark.parametrize('mode',['restart','lost_ack','cancel','withdraw','revoke','expired'])
 def test_real_report_recovery_preserves_effect_and_gate_contracts(tmp_path,monkeypatch,mode):
     import agentguard.management.runner as module
     s,o,p,w,j,claim,report=execute_http_job(tmp_path);calls=[];original=s.finish
+    withdrawn=claimed_case_object(s,o,p,claim) if mode=='withdraw' else None
     def finish(*a,**kw):
         calls.append(1)
         if len(calls)==1 and mode in {'lost_ack','cancel','withdraw','revoke'}:
             if mode=='lost_ack':original(*a,**kw)
             if mode=='cancel':s.cancel(o,p,j['id'])
-            if mode=='withdraw':s.retire_case(o,p,s.objects(o,p,'case')[0]['id'])
+            if mode=='withdraw':s.retire_case(o,p,withdrawn)
             if mode=='revoke':s.revoke_runner(o,p,w['id'])
             raise ConnectionResetError()
         return original(*a,**kw)
@@ -46,7 +55,8 @@ def test_real_report_recovery_preserves_effect_and_gate_contracts(tmp_path,monke
             assert c.scan()[0]['state']=='pending_upload'
         else:
             reply=worker.run_once();assert c.scan()[0]['state']=='acknowledged'
-            assert reply['gate_decision']==('BLOCK' if mode in {'cancel','withdraw'} else 'ALLOW')
+            expected='BLOCK' if mode in {'cancel','withdraw'} else 'ALLOW'
+            assert reply['gate_decision']==expected,json.dumps(dict(mode=mode,expected=expected,actual=reply['gate_decision'],claim_member_count=len(claim['spec']['cases']),cleanup=reply['cleanup_status']))
             assert reply['cleanup_status']=='verified'
         assert not invoked
         assert len(calls)==(2 if mode in {'lost_ack','cancel','withdraw','revoke'} else 1)
@@ -124,3 +134,31 @@ def test_transaction_rollback_before_reply_is_safe_to_retry(tmp_path,monkeypatch
     with s.db() as db:
         assert len(crashed)==1 and db.execute('SELECT count(*) FROM artifacts WHERE job=?',(j['id'],)).fetchone()[0]==1
         assert db.execute("SELECT count(*) FROM usage WHERE job=? AND kind='lease_wall_seconds'",(j['id'],)).fetchone()[0]==1
+
+def test_withdrawal_uses_claim_member_when_nonmember_is_first(tmp_path,monkeypatch):
+    import sys
+    original=execute_http_job
+    def reordered_fixture(path):
+        result=original(path);service,owner,project,_,_,claim,_=result
+        member=claim['spec']['cases'][0]['case'];objects=service.objects
+        def reordered(token,p,kind,**kw):
+            rows=objects(token,p,kind,**kw)
+            if kind=='case':
+                rows.sort(key=lambda row:row['case']['id']==member['id'])
+                assert len(rows)>1 and rows[0]['case']['id']!=member['id'],'Controlled nonmember ordering not established'
+            return rows
+        service.objects=reordered
+        return result
+    monkeypatch.setattr(sys.modules[__name__],'execute_http_job',reordered_fixture)
+    test_real_report_recovery_preserves_effect_and_gate_contracts(tmp_path,monkeypatch,'withdraw')
+
+@pytest.mark.parametrize('change',['missing','wrong_revision','duplicate'])
+def test_claimed_case_selection_rejects_unverified_mapping(tmp_path,monkeypatch,change):
+    service,owner,project,_,_,claim,_=execute_http_job(tmp_path)
+    selected=claimed_case_object(service,owner,project,claim)
+    rows=service.objects(owner,project,'case');member=next(row for row in rows if row['id']==selected)
+    if change=='missing':rows=[row for row in rows if row['id']!=selected]
+    elif change=='wrong_revision':member['case']['revision']+=1
+    else:rows.append(json.loads(json.dumps(member)))
+    monkeypatch.setattr(service,'objects',lambda *a,**kw:rows)
+    with pytest.raises(AssertionError,match='CLAIM_CASE_BINDING_UNVERIFIED'):claimed_case_object(service,owner,project,claim)

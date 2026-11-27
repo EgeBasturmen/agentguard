@@ -8,9 +8,12 @@ pytestmark=pytest.mark.integration
 def test_failed_authenticated_operations_consume_rate_budget(tmp_path):
     from agentguard.management.service import ControlPlane,AccessError
     service,token,project=setup_project(tmp_path);service.rate_limit=3
+    now=service.clock();service.clock=lambda:now
     for _ in range(3):
         with pytest.raises(AccessError):service.create_project(token,'')
     with pytest.raises(AccessError,match='RATE_LIMITED'):service.project(token,project)
+    service.clock=lambda:now+60
+    assert service.project(token,project)['id']==project
 
 def test_quiescent_signed_backup_restore_revokes_credentials_and_preserves_data(tmp_path):
     from agentguard.management.operations import backup,restore

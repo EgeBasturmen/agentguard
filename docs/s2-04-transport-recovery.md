@@ -136,6 +136,12 @@ Eski log birleşik koşulun hangi tarafının bozulduğunu kaydetmez. JUnit sür
 ve teardown içerir; bu süre RPC elapsed yerine kullanılamaz. CI'daki her failure'ı
 yalnız scheduling, Python sürümü veya DNS olarak etiketlemek için kanıt yoktur.
 
+| İlk CI ortamı | Birleşik süre/receive assert'i (case mode'ları) | Non-finish receive assert'i |
+| --- | --- | --- |
+| Windows 3.12 | reset, timeout, trickle, trickle_headers, truncated, server, auth, forbidden, integrity, json, bad_error, legacy (12) | claim, exchange, heartbeat (3) |
+| Windows 3.13 | reset, timeout, server, auth, integrity (5) | yok |
+| Windows 3.14 | timeout, truncated, json (3) | yok |
+
 Kontrollü DNS gecikmesi, normal iki client attempt'in sıfır server receive ile
 sonlanabileceğini gerçek yerel HTTP ile yeniden üretti. Non-finish çağrılarda da
 tek client attempt / sıfır receive geçerliydi; pending evidence korundu.
@@ -199,3 +205,49 @@ Düzeltmenin Git kapsamı beş dosyadır: `rpc_deadline.py`,
 `MANIFEST.in` ve bu belge. Production retry/deadline değerleri, finish protokolü,
 credential publication, admission ve queue şeması değiştirilmez. S2-05 kapsamına
 geçilmez. Custom transport ve OS DNS sınırlamaları önceki profille aynıdır.
+
+### Claim'e bağlı withdrawal fixture'ı
+
+`bea4159f412c9c1b10f7e2ebc6b0d27056e0d68c` için
+[CI 45997402514](https://github.com/EgeBasturmen/agentguard/actions/runs/45997402514)
+10 başarılı / 3 başarısız job ile bitti. Tüm 40 transport case'i on matrix
+ortamında geçti; Windows 3.10 ve 3.12'de yalnız recovery `[withdraw]` case'i
+başarısız oldu ve gate kapalı kaldı. Diğer ortamlar ve Docker geçti. Bu koşu da
+tam kapanış sayılmaz.
+
+Bu fixture `objects(...)[0]` nesnesini retire ediyordu. Üretim liste sözleşmesi
+`ORDER BY created,id` kullanır; liste başının frozen suite üyesi olduğu garanti
+edilmez. Özellikle eşit timestamp'ler sıralamayı etkileyebilir; tarihsel CI'daki
+timestamp değerleri kaydedilmediğinden bunun her koşudaki nedeni olduğu iddia
+edilmez. Gerçek HTTP/job/repository ile nonmember-first sıralaması kurulduğunda
+aynı assertion failure yeniden üretildi: ilgisiz case retire edilirken mevcut
+job'ın ALLOW kalması, withdrawn member'ın yanlış kabulü olarak yorumlanamaz.
+
+Fixture artık yönetim nesnesini claim'deki scenario ID, revision ve fingerprint
+üçlüsüne bağlar. Eksik, yanlış revision veya çift eşleme test başlamadan reddedilir.
+Gerçekten pinned case withdraw edildiğinde BLOCK, verified cleanup ve tek
+artifact/usage koşulları korunur. Dört ek regression, eski case kimliklerini ve
+üretim approval/finish kodunu değiştirmeden bu varsayımı doğrular. Bu ek düzeltme
+yalnız `tests/test_s2_delivery_recovery.py` ve bu belgeyi değiştirir; runtime wheel
+kodu önceki doğrulanan üretim koduyla aynıdır.
+
+Geniş yerel tekrar mevcut Phase 9 rate-limit testinde ayrıca bir failure gösterdi:
+beklenen RATE_LIMITED oluşmadı. Yalnız başarısız sentetik testin abuse DB'si salt
+okunur incelendi; komşu iki 60s pencerede ikişer key satırı ve toplam beşer attempt
+vardı. Bu, test işlemleri sırasında window rollover'ını doğrudan doğrular; kimlik
+ve key değerleri seçilmedi. Aynı pencere varsayımı duvar saatiyle kurulamaz.
+`test_failed_authenticated_operations_consume_rate_budget` artık kendi servisinin
+saatini sabitler; mevcut RATE_LIMITED beklentisi korunur. Saat 60s ilerletildikten
+sonra yeni pencerenin geçerli isteğe izin verdiği de doğrulanır. Üretim rate-limit
+kodu veya limiti değiştirilmez. Bu küçük fixture düzeltmesi
+`tests/test_phase9_operations.py` dosyasına eklenir; eski test kimliği korunur.
+
+Son fixture kaynağıyla **974/974 unit/integration** geçti;
+`artifacts/s2-04-final-closure-all.xml` failure/error/skip içermez. Önceki 970 case
+korunur; yeni dört case yalnız claim eşlemesini doğrular. S2-04 integration profili
+80 case'e yükselir, eski dört Docker case'i değişmez. İlgili gerçek HTTP/repository
+ve Docker tekrarında **24/24**, clock/recovery odaklı tekrarda **21/21** geçti.
+Üretim byte'ları değişmeyen kurulu wheel ile, yalnız güncel iki test dosyası
+readonly bağlanarak yapılan Linux kontrolü **145/145** geçti. Önceki tam Docker
+84/84, native ACL 13/13, temiz wheel ve Chromium kanıtlarının üretim kaynağı
+aynıdır; son commit'in matrix ve paket kanıtı ayrıca CI'da doğrulanmalıdır.
