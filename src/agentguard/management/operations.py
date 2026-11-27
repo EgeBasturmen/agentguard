@@ -204,6 +204,8 @@ class Operations:
         with self.db() as db:
             row=db.execute("SELECT * FROM jobs WHERE id=? AND state='error'",(check_id(job_id),)).fetchone()
             if row is None:raise AccessError('RECOVERY_REQUIRES_FAILED_JOB',409)
+            signed_receipt=row['result_hash'] is not None
+            if signed_receipt and (not row['seal'] or not hmac.compare_digest(row['seal'],self._seal(row))):raise AccessError('STORED_RESULT_INTEGRITY_ERROR',409)
             _,runs,cleanup=self._evaluate_report(json.loads(row['spec']),report)
             if cleanup!='verified' or not runs or any(run.run_manifest is None or not run.run_manifest.started or not run.run_manifest.container_id for run in runs):raise AccessError('RECOVERY_CLEANUP_NOT_PROVEN',409)
             reference=digest(report)
@@ -211,6 +213,9 @@ class Operations:
             if existing and existing[0]!=reference:raise AccessError('RECOVERY_EVIDENCE_CONFLICT',409)
             if not existing:db.execute('INSERT INTO recovery_receipts VALUES(?,?,?,?,?,?)',(identity(),row['project'],job_id,'cache_cleanup',reference,self.clock()))
             db.execute("UPDATE jobs SET cleanup='verified' WHERE id=?",(job_id,))
+            if signed_receipt:
+                updated=db.execute('SELECT * FROM jobs WHERE id=?',(job_id,)).fetchone()
+                db.execute('UPDATE jobs SET seal=? WHERE id=?',(self._seal(updated),job_id))
             self.event(db,None,row['project'],operator,'recovery.cleanup',token_hash(reason))
         return dict(cleanup_status='verified',gate_decision='BLOCK',authorizes_release=False,unknown_usage_reservations_retained=True)
 

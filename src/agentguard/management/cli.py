@@ -16,6 +16,7 @@ from typer.core import TyperCommand
 from agentguard.management.service import ControlPlane,AccessError
 from agentguard.management.client import Client
 from agentguard.management.credentials import private_file,credential,CredentialError
+from agentguard.management.delivery import DeliveryError
 
 app=typer.Typer(help='Private control plane and customer-side runner. No managed/shared-hostile execution.')
 
@@ -30,6 +31,9 @@ class EnrollmentCommand(TyperCommand):
 
 def attempt(fn):
     try:return fn()
+    except DeliveryError as error:
+        typer.echo(json.dumps(dict(error=error.code,delivery_state=error.delivery_state,attempts=error.attempts,category=error.category,recovery_required=True)),err=True)
+        raise typer.Exit(2) from None
     except CredentialError as error:
         typer.echo(json.dumps(dict(error=error.code,operation_status=error.operation_status,
             publication_status=error.publication_status,credential_written=False,recovery_required=error.recovery_required)),err=True)
@@ -90,10 +94,11 @@ def enroll(server:str=typer.Option(...,'--server'),credential_file:Path=typer.Op
 
 @app.command('runner')
 def runner(server:str=typer.Option(...,'--server'),credential_file:Path=typer.Option(...,'--credential-file'),
-    workspace:Path=typer.Option(...,'--workspace'),cache:Path=typer.Option(...,'--cache'),once:bool=False,allow_external:bool=False,allow_live_models:bool=False):
+    workspace:Path=typer.Option(...,'--workspace'),cache:Path=typer.Option(...,'--cache'),once:bool=False,allow_external:bool=False,allow_live_models:bool=False,recover_pending:bool=False):
     from agentguard.management.runner import PrivateRunner
     def execute():
-        worker=PrivateRunner(Client(server,credential(credential_file)),source_root=workspace,cache_root=cache,allow_external=allow_external,allow_live_models=allow_live_models)
+        from agentguard.management.delivery import RecoveryPolicy
+        worker=PrivateRunner(Client(server,credential(credential_file)),source_root=workspace,cache_root=cache,allow_external=allow_external,allow_live_models=allow_live_models,recovery_policy=RecoveryPolicy() if recover_pending else None)
         while True:
             result=worker.run_once()
             if result is not None:emit(dict(id=result['id'],state=result['state'],gate_decision=result['gate_decision'],cleanup_status=result['cleanup_status']))

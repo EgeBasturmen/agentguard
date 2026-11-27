@@ -99,8 +99,10 @@ class Results:
         with self.lock,self.db() as db:
             runner=self._runner(db,runner_token)
             existing=db.execute('SELECT * FROM jobs WHERE id=? AND project=? AND runner=?',(check_id(job_id),runner['project'],runner['id'])).fetchone()
-            if existing and existing['state']=='completed':
+            if existing and (existing['state']=='completed' or existing['state']=='error' and existing['result_hash'] is not None):
+                if not existing['seal'] or not hmac.compare_digest(existing['seal'],self._seal(existing)):raise AccessError('STORED_RESULT_INTEGRITY_ERROR',409)
                 if not isinstance(lease,str) or not hmac.compare_digest(existing['lease'] or '',token_hash(lease)) or existing['result_hash']!=report_hash:raise AccessError('RESULT_CONFLICT',409)
+                self._runner(db,runner_token)
                 return dict(self._job_view(existing),delivery_accepted=True,report_digest=report_hash)
             _,job=self._leased(db,runner_token,job_id,lease);spec=json.loads(job['spec'])
             reason=self._lifecycle_error(job,cancellation=False)
@@ -109,7 +111,13 @@ class Results:
                 return self._job_view(db.execute('SELECT * FROM jobs WHERE id=?',(job_id,)).fetchone())
             if set(report)=={'failure'}:
                 if report['failure'] not in {'RUNNER_EXECUTION_ERROR','SOURCE_VERSION_MISMATCH','RUNNER_EXTERNAL_GRANT_REQUIRED'}:raise AccessError('INVALID_RUNNER_FAILURE',400)
-                self._fail_job(db,job,report['failure']);return dict(self._job_view(db.execute('SELECT * FROM jobs WHERE id=?',(job_id,)).fetchone()),delivery_accepted=True,report_digest=report_hash)
+                self._fail_job(db,job,report['failure'])
+                # An accepted terminal failure is a receipt, not permission to execute.
+                db.execute('UPDATE jobs SET result_hash=?,lease=? WHERE id=?',(report_hash,job['lease'],job_id))
+                accepted=db.execute('SELECT * FROM jobs WHERE id=?',(job_id,)).fetchone()
+                db.execute('UPDATE jobs SET seal=? WHERE id=?',(self._seal(accepted),job_id))
+                self._runner(db,runner_token)
+                return dict(self._job_view(accepted),delivery_accepted=True,report_digest=report_hash)
             decision,runs,cleanup=self._evaluate_report(spec,report)
             # Fence against review withdrawal and cancellation while customer execution was running.
             reason=self._admission_error(db,job)

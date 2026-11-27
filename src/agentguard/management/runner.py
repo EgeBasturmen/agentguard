@@ -48,7 +48,10 @@ def execute_spec(spec,source_root,*,cancel_event=None,allow_external=False,allow
 
 
 class PrivateRunner:
-    def __init__(self,client,*,source_root,cache_root,allow_external=False,allow_live_models=False):
+    def __init__(self,client,*,source_root,cache_root,allow_external=False,allow_live_models=False,recovery_policy=None):
+        from agentguard.management.delivery import RecoveryPolicy
+        if recovery_policy is not None and not isinstance(recovery_policy,RecoveryPolicy):raise ValueError('Explicit recovery policy required')
+        self.recovery_policy=recovery_policy
         self.client=client;self.source_root=Path(source_root).resolve(strict=True);self.cache=Path(cache_root).absolute();self.allow_external=allow_external;self.allow_live_models=allow_live_models
         from agentguard.management.cache import EvidenceCache
         self.evidence=EvidenceCache(self.cache,server=client.url,credential=client.token)
@@ -60,7 +63,13 @@ class PrivateRunner:
         return self.evidence.purge()
 
     def run_once(self):
-        with self.evidence.session():return self._run_once()
+        with self.evidence.session():
+            if self.recovery_policy is not None:
+                for status in self.evidence.scan():
+                    if status['state']=='pending_upload':
+                        from agentguard.management.delivery import deliver_pending
+                        return deliver_pending(self.evidence,self.client,status['project'],status['job'],policy=self.recovery_policy)
+            return self._run_once()
 
     def _run_once(self):
         self.purge_cache();self.evidence.ensure_ready();claim=self.client.request('/api/runner/claim',{})
@@ -92,6 +101,9 @@ class PrivateRunner:
                 result=dict(failure=error.code if error.code in {'SOURCE_VERSION_MISMATCH','RUNNER_EXTERNAL_GRANT_REQUIRED'} else 'RUNNER_EXECUTION_ERROR')
             except Exception:result=dict(failure='RUNNER_EXECUTION_ERROR')
             self._cache(claim,result)
+            if self.recovery_policy is not None:
+                from agentguard.management.delivery import deliver_pending
+                return deliver_pending(self.evidence,self.client,claim['project'],claim['id'],policy=self.recovery_policy)
             reply=self.client.request('/api/runner/finish',dict(job_id=claim['id'],lease=claim['lease'],report=result))
             self.evidence.acknowledge(claim,result,reply)
             return reply

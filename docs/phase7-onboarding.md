@@ -69,7 +69,8 @@ tek atomik kayıttadır. Pending, incomplete veya corrupt kayıt varsa runner ot
 yeni job almaz; TTL bunları sessizce silmez. Eski V1 cache'leri otomatik dönüştürülmez.
 Canonical `job.json` export'u ile özel `job.entry.json` dosyasını karıştırmayın;
 entry dosyası lease içerir ve paylaşılmamalıdır. Recovery ve orphan staging kuralları:
-[S2-03 private cache](s2-03-private-cache.md). Otomatik upload retry bu profilde yoktur.
+[S2-03 private cache](s2-03-private-cache.md). Upload retry varsayılan kapalıdır;
+S2-04'ün açık recovery seçeneği aşağıda açıklanır.
 Her runner için ayrı cache kullanın; paylaşılan cache desteklenmez. Windows'ta güvenilen,
 tercihen ayrı bir OS hesabı kullanın.
 İşletim sistemi kullanıcısı, controller operatörü ve custom host adapter’lar güvenilir
@@ -164,6 +165,13 @@ Orphan staging için güvenli operatör temizliği ayrı, açık onaylı bir iş
    kopyalarından güvenli silinme garantisi değildir. İçeriği loglamadan sonucu kaydedin.
 
 ## 2. Test et
+
+Sonuç tesliminde opt-in recovery için mevcut `management runner` komutuna
+`--recover-pending` eklenebilir. Bu seçenek yalnız bütünlüğü doğrulanmış pending
+raporu sınırlı retry ile teslim eder; agent'ı yeniden çalıştırmaz. Varsayılan kapalıdır.
+Credential yine özel dosyadan okunur; secret'ı argümana veya shell history'ye yazmayın.
+Budget tükenmesi veya bozuk/legacy cache operatör incelemesi ister; cache'i silerek
+execution'ı yeniden başlatmayın. [Teslim recovery sınırları](s2-04-transport-recovery.md).
 
 Queued job, çalıştırılmadan önce güncel approval/revision/source/suite ve yetki
 kontrolünden tekrar geçer. Built-in runner ilk heartbeat ACK'ini bekler; admission
