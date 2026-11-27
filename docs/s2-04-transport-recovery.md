@@ -251,3 +251,40 @@ ve Docker tekrarında **24/24**, clock/recovery odaklı tekrarda **21/21** geçt
 readonly bağlanarak yapılan Linux kontrolü **145/145** geçti. Önceki tam Docker
 84/84, native ACL 13/13, temiz wheel ve Chromium kanıtlarının üretim kaynağı
 aynıdır; son commit'in matrix ve paket kanıtı ayrıca CI'da doğrulanmalıdır.
+
+### Receive sayısı ve bounded client attempt ayrımı
+
+`fa65cce` için [CI 46034392260](https://github.com/EgeBasturmen/agentguard/actions/runs/46034392260)
+11/13 job'ı geçti. Windows 3.10'da yalnız `lost_ack` fixture'ının tam iki receive
+beklentisi başarısız oldu; gate, cleanup ve yeniden execution yapılmaması
+kontrolleri bu assertion'dan önce geçti. Önceki Windows withdrawal ve tüm
+transport case'leri geçti. Tarihsel kayıt üçüncü denemenin kesin ağ nedenini
+saklamaz; bu neden tahmin edilmez.
+
+Kontrollü gerçek HTTP regresyonu ilk kabulün cevabını ve ikinci teslim cevabını
+belirsiz bıraktı. Üçüncü teslim aynı kabulün receipt'ini aldı; eski tam iki receive
+assertion'ı önce başarısız oldu. Bu, üç attempt bütçesinde geçerli bir akıştır.
+Testler artık client attempt ve server receive ölçümlerini ayrı tutar; receive
+sayısı attempt sayısını, attempt sayısı değişmeyen policy üst sınırını aşamaz.
+Enjekte edilen server hatalarının gerçekten alınması ayrıca zorunludur.
+Önceki hatalar retry allowlist'iyle, son sonuç doğrulanmış cevap veya beklenen
+kalıcı hata koduyla karşılaştırılır. Permanent authentication/protocol hataları
+transient olarak yeniden sınıflanmaz. Başarısız teslim pending kalır.
+
+Gerçek Docker restart testinde ilk, recovery kapalı teslim tek attempt'tir;
+sonraki recovery pass kendi değişmeyen bütçesine sahiptir. Bu iki pass tek
+execution, artifact ve kullanım kaydı üretmelidir. İkinci execution, duplicate
+artifact/usage, BLOCK'un ALLOW'a dönüşmesi veya cleanup kaybı kabul edilmez.
+Bu düzeltme yalnız test ölçümlerini değiştirir; production deadline, retry
+policy, idempotency veya cache/approval güvenlik sözleşmesi değiştirilmez.
+
+Son kaynakla Windows Python 3.11'de **975/975 unit/integration** ve **84/84 gerçek
+Docker** testi geçti; failure/error/skip yok. Önceki 974 unit/integration ve
+84 Docker kimliği korunur; ek case iki belirsiz cevap regresyonudur. Odaklı gerçek
+HTTP/recovery grubu **34/34**, ağsız salt okunur Linux/POSIX container kontrolü
+**146/146** geçti. Windows production cache/credential izin testleri geniş suite'e
+dahildir; önceki native fixture ACL 13/13 kaydı bunların yerine kullanılmaz.
+JUnit kayıtları `artifacts/s2-04-bounded-all.xml`, `s2-04-bounded-docker.xml` ve
+`s2-04-bounded-focused.xml` dosyalarıdır. S2-04 integration profili 81 case ve
+Docker profili dört case içerir. Son commit'in tüm CI matrix/paket sonuçları
+ayrıca doğrulanmalıdır; bu yerel kayıt tek başına teknik kapanış değildir.

@@ -9,6 +9,7 @@ from agentguard.management.runner import PrivateRunner
 from agentguard.management.http import running_server
 from agentguard.management.store import AccessError
 from test_phase7_results import execute_http_job
+from s2_transport_support import MeasuredClient,require
 pytestmark=pytest.mark.integration
 TOKEN='ag7r_'+'s'*43
 
@@ -49,17 +50,26 @@ def test_real_report_recovery_preserves_effect_and_gate_contracts(tmp_path,monke
     monkeypatch.setattr(module,'execute_spec',forbidden)
     with running_server(s) as url:
         c=EvidenceCache(tmp_path/'cache',server=url,credential=w['runner_token']);c.begin(claim);c.complete(claim,report)
-        worker=PrivateRunner(Client(url,w['runner_token']),source_root=tmp_path,cache_root=tmp_path/'cache',recovery_policy=policy())
+        client=MeasuredClient(url,w['runner_token']);limits=policy();terminal=None
+        worker=PrivateRunner(client,source_root=tmp_path,cache_root=tmp_path/'cache',recovery_policy=limits)
         if mode in {'revoke','expired'}:
-            with pytest.raises(AccessError):worker.run_once()
+            with pytest.raises(AccessError) as caught:worker.run_once()
+            terminal=caught.value.code
             assert c.scan()[0]['state']=='pending_upload'
+            require(terminal in ({'UNAUTHENTICATED'} if mode=='revoke' else {'STALE_LEASE','CACHE_ACKNOWLEDGEMENT_UNVERIFIED'}),mode=mode,terminal_code=terminal,rpc=client.measurements)
         else:
             reply=worker.run_once();assert c.scan()[0]['state']=='acknowledged'
             expected='BLOCK' if mode in {'cancel','withdraw'} else 'ALLOW'
             assert reply['gate_decision']==expected,json.dumps(dict(mode=mode,expected=expected,actual=reply['gate_decision'],claim_member_count=len(claim['spec']['cases']),cleanup=reply['cleanup_status']))
             assert reply['cleanup_status']=='verified'
         assert not invoked
-        assert len(calls)==(2 if mode in {'lost_ack','cancel','withdraw','revoke'} else 1)
+        metrics=dict(mode=mode,client_attempts=len(client.measurements),server_received=len(calls),max_attempts=limits.max_attempts,terminal_code=terminal,rpc=client.measurements)
+        required=2 if mode in {'lost_ack','cancel','withdraw','revoke'} else 1
+        require(required<=len(calls)<=len(client.measurements)<=limits.max_attempts,**metrics)
+        transient={'RPC_TRANSPORT_UNVERIFIED','OPERATION_FAILED_NO_RESULT_VERIFIED','REMOTE_OPERATION_FAILED','SERVICE_UNAVAILABLE','SERVER_BUSY','UPSTREAM_UNAVAILABLE','GATEWAY_TIMEOUT'}
+        require(all(row['code'] in transient for row in client.measurements[:-1]),**metrics)
+        require(client.measurements[-1]['code'] in {'HTTP_JSON_COMPLETE',terminal},**metrics)
+        require(all(0<row['deadline_seconds']<=limits.request_timeout for row in client.measurements),**metrics)
     with s.db() as db:
         assert db.execute('SELECT count(*) FROM artifacts WHERE job=?',(j['id'],)).fetchone()[0]==(0 if mode in {'revoke','expired'} else 1)
         assert db.execute("SELECT count(*) FROM usage WHERE job=? AND kind='admitted_run'",(j['id'],)).fetchone()[0]==1
@@ -71,15 +81,17 @@ def test_concurrent_recovery_has_one_finish_and_one_artifact(tmp_path):
     s.finish=finish
     with running_server(s) as url:
         first=EvidenceCache(tmp_path/'cache',server=url,credential=w['runner_token']);other=EvidenceCache(tmp_path/'cache',server=url,credential=w['runner_token'])
-        first.begin(claim);first.complete(claim,report);client=Client(url,w['runner_token'])
+        first.begin(claim);first.complete(claim,report);client=MeasuredClient(url,w['runner_token']);blocked=MeasuredClient(url,w['runner_token'])
         with ThreadPoolExecutor(1) as pool:
             future=pool.submit(deliver_pending,first,client,p,j['id'],policy=RecoveryPolicy(total_seconds=15,request_timeout=10))
             try:
                 assert entered.wait(10)
-                with pytest.raises(CacheError,match='CACHE_BUSY'):deliver_pending(other,client,p,j['id'],policy=policy())
+                with pytest.raises(CacheError,match='CACHE_BUSY'):deliver_pending(other,blocked,p,j['id'],policy=policy())
             finally:release.set()
             assert future.result(10)['gate_decision']=='ALLOW'
-        assert len(calls)==1
+        require(not blocked.measurements,blocked_client_attempts=len(blocked.measurements))
+        require(1<=len(calls)<=len(client.measurements)<=3,server_received=len(calls),client_attempts=len(client.measurements),rpc=client.measurements)
+        with s.db() as db:assert db.execute('SELECT count(*) FROM artifacts WHERE job=?',(j['id'],)).fetchone()[0]==1
 
 @pytest.mark.parametrize('change',['origin','runner','project','job'])
 def test_wrong_delivery_binding_never_sends_rpc(tmp_path,change):
@@ -162,3 +174,18 @@ def test_claimed_case_selection_rejects_unverified_mapping(tmp_path,monkeypatch,
     else:rows.append(json.loads(json.dumps(member)))
     monkeypatch.setattr(service,'objects',lambda *a,**kw:rows)
     with pytest.raises(AssertionError,match='CLAIM_CASE_BINDING_UNVERIFIED'):claimed_case_object(service,owner,project,claim)
+
+def test_two_unverified_replies_do_not_duplicate_acceptance(tmp_path,monkeypatch):
+    import sys
+    original=execute_http_job;observed=[]
+    def twice_lost(path):
+        result=original(path);service=result[0];finish=service.finish;seen=observed
+        def second_fault(*a,**kw):
+            seen.append(1)
+            if len(seen)==2:raise ConnectionResetError()
+            return finish(*a,**kw)
+        service.finish=second_fault
+        return result
+    monkeypatch.setattr(sys.modules[__name__],'execute_http_job',twice_lost)
+    test_real_report_recovery_preserves_effect_and_gate_contracts(tmp_path,monkeypatch,'lost_ack')
+    require(len(observed)==3,server_received=len(observed),injected_unverified_replies=2)

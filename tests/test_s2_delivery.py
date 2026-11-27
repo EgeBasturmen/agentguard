@@ -6,6 +6,7 @@ from agentguard.management.client import Client
 from agentguard.management.store import AccessError
 from agentguard.management.http import running_server
 from test_s2_dispatch import fixture,invalidate
+from s2_transport_support import MeasuredClient,require
 pytestmark=pytest.mark.integration
 
 @pytest.fixture(autouse=True)
@@ -39,14 +40,22 @@ def test_real_http_delivery_is_bounded_and_no_duplicate_effect(tmp_path,mode):
     s.finish=finish
     with running_server(s) as url:
         cache=EvidenceCache(tmp_path/'cache',server=url,credential=w['runner_token']);cache.begin(claim);cache.complete(claim,report)
-        client=Client(url,w['runner_token'])
+        client=MeasuredClient(url,w['runner_token']);limits=policy();terminal=None
         if mode in {'budget','auth','legacy'}:
-            with pytest.raises(AccessError):deliver_pending(cache,client,p,j['id'],policy=policy())
+            with pytest.raises(AccessError) as caught:deliver_pending(cache,client,p,j['id'],policy=limits)
+            terminal=caught.value.code
             assert cache.scan()[0]['state']=='pending_upload'
+            require(terminal=={'budget':'FINISH_DELIVERY_RETRY_EXHAUSTED','auth':'UNAUTHENTICATED','legacy':'CACHE_ACKNOWLEDGEMENT_UNVERIFIED'}[mode],mode=mode,terminal_code=terminal,rpc=client.measurements)
         else:
-            reply=deliver_pending(cache,client,p,j['id'],policy=policy())
+            reply=deliver_pending(cache,client,p,j['id'],policy=limits)
             assert reply['gate_decision']=='BLOCK' and cache.scan()[0]['state']=='acknowledged'
-        assert len(calls)==(3 if mode=='budget' else 1 if mode in {'normal','auth','legacy'} else 2)
+        metrics=dict(mode=mode,client_attempts=len(client.measurements),server_received=len(calls),max_attempts=limits.max_attempts,terminal_code=terminal,rpc=client.measurements)
+        required=1 if mode in {'normal','auth','legacy','budget'} else 2
+        require(required<=len(calls)<=len(client.measurements)<=limits.max_attempts,**metrics)
+        transient={'RPC_TRANSPORT_UNVERIFIED','OPERATION_FAILED_NO_RESULT_VERIFIED','REMOTE_OPERATION_FAILED','SERVICE_UNAVAILABLE','SERVER_BUSY','UPSTREAM_UNAVAILABLE','GATEWAY_TIMEOUT'}
+        require(all(row['code'] in transient for row in client.measurements[:-1]),**metrics)
+        if mode=='budget':require(caught.value.attempts==len(client.measurements),**metrics)
+        else:require(client.measurements[-1]['code'] in {'HTTP_JSON_COMPLETE',terminal},**metrics)
     with s.db() as db:
         assert db.execute('SELECT count(*) FROM artifacts').fetchone()[0]==0
         assert db.execute("SELECT count(*) FROM usage WHERE job=? AND kind='admitted_run'",(j['id'],)).fetchone()[0]==1
