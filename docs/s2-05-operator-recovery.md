@@ -158,3 +158,44 @@ Testler ve belgeler:
 
 Toplam 19 Git dosyası; test artefaktları, build çıktıları ve yerel yardımcılar
 bu manifest'e dahil değildir. Önerilen commit: `fix: bind operator cleanup recovery to job execution evidence`.
+
+## İlk CI ve functional delivery fixture düzeltmesi
+
+`1ab68c8145e0d67097be1082a3750d8b3e61b7c2` için
+[CI 46094182628](https://github.com/EgeBasturmen/agentguard/actions/runs/46094182628)
+11 job'ı geçti; Windows 3.14 integration'da yalnız mevcut S2-04 `cancel` case'i
+`FINISH_DELIVERY_RETRY_EXHAUSTED` verdi ve gate doğru şekilde başarısız oldu.
+Diğer dokuz matrix ortamı ile Docker geçti. Yeni 57 integration case'i ve dört
+Docker case'i çalıştı; logdaki tek failure yeni operator testlerinden değildi.
+Bu koşu kapanış kanıtı değildir. Windows 3.14'ün sonradan atlanan paket/ACL
+adımları başarılı gibi gösterilmez.
+
+Fixture fonksiyonel receipt/cancellation/idempotency kontrollerinde 0,3s request /
+2s toplam policy kullanıyordu; üretimin mevcut varsayılanı 3s / 15s ve üç attempt'tir.
+CI exception'ı güvenli attempt/receive/acceptance ölçümleri kaydetmediğinden tarihsel
+kesin ağ veya scheduler/cache gecikmesi nedeni çıkarılamaz. Bu bir üretim kusuru
+olarak ilan edilmez. Kontrollü logical-clock cache recheck gecikmesi (3s) aynı
+fixture'ı önce başarısız yaptı: **0 client attempt, 0 server receive, kabul yok,
+category=budget**. Bu durumda production delivery kodunun ağ başlatmaması doğrudur.
+
+Fonksiyonel fixture artık değiştirilmemiş `RecoveryPolicy()` varsayılan profilini
+kullanır. Yeni gerçek HTTP regresyonu aynı cache gecikmesinden sonra cancellation
+ve BLOCK receipt'ini doğrular; client deadline'ları varsayılan policy ile eşleşir.
+Kısa DNS/connect/TLS/header/body deadline, total-budget, backoff/jitter ve no-RPC
+expiry testleri ayrı transport grubunda aynen korunur. Retry üst sınırı, kalıcı
+hata reddi, tek logical acceptance/artifact/accounting ve pending koruma koşulları
+gevşetilmez. Hiçbir production timeout veya source modülü değiştirilmez.
+
+Beklenmeyen functional delivery failure'ı artık yalnız güvenli mode, client attempt,
+server receive, acceptance boolean, error category ve RPC timing/code metadata'sı
+gösterir; report/lease/token/body/exception metni göstermez. Bu follow-up yalnız
+`tests/test_s2_delivery.py` ve bu belgeyi değiştirir; ilk 19 dosyalık commit korunur.
+
+Düzeltme sonrasında son kaynakla **1033/1033 unit/integration** (398 + 635),
+**75/75 hedefli HTTP/deadline/recovery** ve güncel test dosyasının readonly
+bağlandığı kurulu wheel Linux grubunda **132/132** geçti. Önceki 1032 case aynen
+korunur; yalnız deterministik cache-latency regresyonu eklenir. İlk CI'da geçen
+88 Docker case'i ve temiz Docker/browser wheel probe'u aynı production byte'larına
+aittir; bu follow-up production kaynaklarını değiştirmez. Yeni 57 S2-05 integration
+ve dört Docker case'inin sayısı/kimlikleri korunur. Yeni commit'in tüm matrix,
+Docker, native ACL, Chromium, restore ve temiz paket kayıtları CI'da tekrar doğrulanır.

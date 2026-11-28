@@ -1,6 +1,6 @@
 """Bounded real HTTP delivery, no agent retries. PYTEST_DONT_REWRITE."""
 import pytest
-from agentguard.management.delivery import RecoveryPolicy,deliver_pending
+from agentguard.management.delivery import RecoveryPolicy,DeliveryError,deliver_pending
 from agentguard.management.cache import EvidenceCache,CacheError
 from agentguard.management.client import Client
 from agentguard.management.store import AccessError
@@ -14,7 +14,7 @@ def private_fixture(tmp_path):
     from scripts.sprint1_verification_support import secure_fixture_directory
     secure_fixture_directory(tmp_path)
 
-def policy():return RecoveryPolicy(max_attempts=3,total_seconds=2,request_timeout=.3,base_delay=.01,max_delay=.02)
+def policy():return RecoveryPolicy()
 
 @pytest.mark.parametrize('mode',['normal','before_commit','after_commit','unavailable','restart','budget','auth','legacy','cancel','withdraw'])
 def test_real_http_delivery_is_bounded_and_no_duplicate_effect(tmp_path,mode):
@@ -47,7 +47,10 @@ def test_real_http_delivery_is_bounded_and_no_duplicate_effect(tmp_path,mode):
             assert cache.scan()[0]['state']=='pending_upload'
             require(terminal=={'budget':'FINISH_DELIVERY_RETRY_EXHAUSTED','auth':'UNAUTHENTICATED','legacy':'CACHE_ACKNOWLEDGEMENT_UNVERIFIED'}[mode],mode=mode,terminal_code=terminal,rpc=client.measurements)
         else:
-            reply=deliver_pending(cache,client,p,j['id'],policy=limits)
+            try:reply=deliver_pending(cache,client,p,j['id'],policy=limits)
+            except DeliveryError as error:
+                with s.db() as db:accepted=db.execute('SELECT result_hash IS NOT NULL FROM jobs WHERE id=?',(j['id'],)).fetchone()[0]
+                require(False,mode=mode,client_attempts=len(client.measurements),server_received=len(calls),server_accepted=bool(accepted),reported_attempts=error.attempts,category=error.category,total_budget=limits.total_seconds,request_deadline=limits.request_timeout,rpc=client.measurements)
             assert reply['gate_decision']=='BLOCK' and cache.scan()[0]['state']=='acknowledged'
         metrics=dict(mode=mode,client_attempts=len(client.measurements),server_received=len(calls),max_attempts=limits.max_attempts,terminal_code=terminal,rpc=client.measurements)
         required=1 if mode in {'normal','auth','legacy','budget'} else 2
@@ -63,3 +66,21 @@ def test_real_http_delivery_is_bounded_and_no_duplicate_effect(tmp_path,mode):
 @pytest.mark.parametrize('value',[0,6,True])
 def test_invalid_retry_attempts_fail_closed(value):
     with pytest.raises(ValueError):RecoveryPolicy(max_attempts=value)
+
+def test_functional_cancel_fixture_uses_default_budget_after_cache_latency(tmp_path,monkeypatch):
+    """Cache latency is not evidence that the real HTTP cancellation failed."""
+    import sys
+    module=sys.modules[__name__];original=module.deliver_pending;observed=[]
+    def delayed(cache,client,project,job,*,policy):
+        now=[0.0];reads=[];delivery=cache.delivery
+        def inspect(*a,**kw):
+            result=delivery(*a,**kw);reads.append(1)
+            if len(reads)==2:now[0]+=3.0
+            return result
+        monkeypatch.setattr(cache,'delivery',inspect)
+        try:return original(cache,client,project,job,policy=policy,clock=lambda:now[0])
+        finally:observed.extend(client.measurements)
+    monkeypatch.setattr(module,'deliver_pending',delayed)
+    test_real_http_delivery_is_bounded_and_no_duplicate_effect(tmp_path,'cancel')
+    defaults=RecoveryPolicy()
+    require(len(observed)>=2 and all(row['deadline_seconds']==defaults.request_timeout for row in observed),client_attempts=len(observed),rpc=observed)
