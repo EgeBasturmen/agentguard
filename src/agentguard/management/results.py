@@ -38,7 +38,8 @@ class Results:
         return hmac.new(self.signing_key,encode(value).encode(),hashlib.sha256).hexdigest()
 
     def _job_view(self,job):
-        if job['state']=='completed' and (not job['seal'] or not hmac.compare_digest(job['seal'],self._seal(job))):
+        sealed=job['state']=='completed' or job['state']=='error' and (job['result_hash'] is not None or job['seal'] is not None or job['cleanup']=='verified')
+        if sealed and (not job['seal'] or not hmac.compare_digest(job['seal'],self._seal(job))):
             return dict(id=job['id'],project=job['project'],state='error',gate_decision='BLOCK',authorizes_release=False,
                 cleanup_status='unverified',decision=GateDecision(decision_status='unverified',reasons=['STORED_RESULT_INTEGRITY_ERROR']).model_dump(mode='json'))
         result=super()._job_view(job)
@@ -116,6 +117,7 @@ class Results:
                 db.execute('UPDATE jobs SET result_hash=?,lease=? WHERE id=?',(report_hash,job['lease'],job_id))
                 accepted=db.execute('SELECT * FROM jobs WHERE id=?',(job_id,)).fetchone()
                 db.execute('UPDATE jobs SET seal=? WHERE id=?',(self._seal(accepted),job_id))
+                accepted=db.execute('SELECT * FROM jobs WHERE id=?',(job_id,)).fetchone()
                 self._runner(db,runner_token)
                 return dict(self._job_view(accepted),delivery_accepted=True,report_digest=report_hash)
             decision,runs,cleanup=self._evaluate_report(spec,report)

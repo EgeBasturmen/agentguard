@@ -11,7 +11,7 @@ from agentguard.execution.agent_spec import AgentLaunchSpec
 from agentguard.management.objects import safe_runtime
 from agentguard.management.store import AccessError
 
-def execute_spec(spec,source_root,*,cancel_event=None,allow_external=False,allow_live_models=False):
+def execute_spec(spec,source_root,*,cancel_event=None,allow_external=False,allow_live_models=False,execution_binding=None):
     if cancel_event is not None and cancel_event.is_set():raise AccessError('RUNNER_EXECUTION_CANCELLED',409)
     root=Path(source_root).resolve(strict=True)
     snapshot=Snapshot.model_validate(spec['snapshot']);connection=spec['connection']
@@ -43,7 +43,13 @@ def execute_spec(spec,source_root,*,cancel_event=None,allow_external=False,allow
             return dict(preflight=dict(schema_version=1,checks=checks,agent_invoked=False,verification_level='configuration/source-pin/preflight; not behavior'))
         if spec['kind']!='suite':raise AccessError('UNKNOWN_JOB_KIND',400)
         if cancel_event is not None and cancel_event.is_set():raise AccessError('RUNNER_EXECUTION_CANCELLED',409)
-        execution=SuiteRunner().run(repository,snapshot,base_dir=root,cancel_event=cancel_event)
+        run_ids=None
+        if execution_binding is not None:
+            from agentguard.core.manifest import digest
+            b=execution_binding['value']
+            if b['spec_hash']!=digest(spec) or [(p['id'],p['revision'],p['fingerprint']) for p in b['cases']]!=[(p['id'],p['revision'],p['fingerprint']) for p in snapshot.cases]:raise AccessError('RECOVERY_BINDING_CHANGED',409)
+            run_ids={p['id']:p['run_id'] for p in b['cases']}
+        execution=SuiteRunner().run(repository,snapshot,base_dir=root,cancel_event=cancel_event,**({'run_ids':run_ids} if run_ids is not None else {}))
         return dict(execution=execution.model_dump(mode='json'))
 
 
@@ -96,11 +102,18 @@ class PrivateRunner:
             if cancel.is_set() or time.monotonic()>=deadline:return denied()
             self.evidence.begin(claim)
             if cancel.is_set() or time.monotonic()>=deadline:return denied()
-            try:result=execute_spec(claim['spec'],self.source_root,cancel_event=cancel,allow_external=self.allow_external,allow_live_models=self.allow_live_models)
+            try:result=execute_spec(claim['spec'],self.source_root,cancel_event=cancel,allow_external=self.allow_external,allow_live_models=self.allow_live_models,**({'execution_binding':claim['recovery_binding']} if 'recovery_binding' in claim else {}))
             except AccessError as error:
                 result=dict(failure=error.code if error.code in {'SOURCE_VERSION_MISMATCH','RUNNER_EXTERNAL_GRANT_REQUIRED'} else 'RUNNER_EXECUTION_ERROR')
             except Exception:result=dict(failure='RUNNER_EXECUTION_ERROR')
             self._cache(claim,result)
+            if claim.get('recovery_binding') is not None and 'execution' in result:
+                try:
+                    self.client.request('/api/runner/recovery-evidence',dict(job_id=claim['id'],lease=claim['lease'],evidence=self.evidence.recovery_evidence(claim['project'],claim['id'])))
+                except AccessError:
+                    # One evidence registration attempt; normal finish remains
+                    # available. Missing registration cannot authorize recovery.
+                    pass
             if self.recovery_policy is not None:
                 from agentguard.management.delivery import deliver_pending
                 return deliver_pending(self.evidence,self.client,claim['project'],claim['id'],policy=self.recovery_policy)

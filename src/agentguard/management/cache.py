@@ -131,7 +131,10 @@ class EvidenceCache:
             if set(entry)!={'payload','checksum'} or digest(entry['payload'])!=entry['checksum']:raise ValueError()
             p=entry['payload']
             fields={'version','owner','project','job','execution','lease','lease_hash','spec_hash','created','expires','state','report','report_hash','receipt'}
-            if set(p)!=fields or p['version']!=2 or p['owner']!=self.owner or p['project']!=project or p['job']!=job:raise ValueError()
+            if set(p) not in (fields,fields|{'recovery_binding'}) or p['version']!=2 or p['owner']!=self.owner or p['project']!=project or p['job']!=job:raise ValueError()
+            if 'recovery_binding' in p:
+                b=p['recovery_binding']['value']
+                if any(p[k]!=b[k] for k in ('project','job','execution','lease_hash','spec_hash')):raise ValueError()
             check_id(p['execution'])
             if not isinstance(p['lease'],str) or not 1<=len(p['lease'])<=512 or hashlib.sha256(p['lease'].encode()).hexdigest()!=p['lease_hash']:raise ValueError()
             if not re.fullmatch('[0-9a-f]{64}',p['spec_hash']):raise ValueError()
@@ -149,6 +152,7 @@ class EvidenceCache:
 
     def _bound(self,p,claim):
         if p['job']!=claim['id'] or p['project']!=claim['project'] or p['lease']!=claim['lease'] or p['spec_hash']!=digest(claim['spec']):raise CacheError('CACHE_BINDING_MISMATCH')
+        if p.get('recovery_binding')!=claim.get('recovery_binding'):raise CacheError('CACHE_BINDING_MISMATCH')
 
     def begin(self,claim):
         with self.session():
@@ -162,6 +166,10 @@ class EvidenceCache:
             payload=dict(version=2,owner=self.owner,project=claim['project'],job=claim['id'],execution=uuid.uuid4().hex,lease=lease,
                 lease_hash=hashlib.sha256(lease.encode()).hexdigest(),spec_hash=digest(claim['spec']),created=now,expires=now+days*86400,
                 state='incomplete',report=None,report_hash=None,receipt=None)
+            if 'recovery_binding' in claim:
+                binding=claim['recovery_binding'];b=binding['value']
+                if any(payload[k]!=b[k] for k in ('project','job','lease_hash','spec_hash')):raise CacheError('CACHE_BINDING_MISMATCH')
+                check_id(b['execution']);payload.update(execution=b['execution'],recovery_binding=binding)
             self._atomic(path,self._envelope(payload))
 
     def complete(self,claim,report):
@@ -231,6 +239,13 @@ class EvidenceCache:
                     try:p=self._load(folder.name,job);results.append(dict(project=folder.name,job=job,execution=p['execution'],state=p['state']))
                     except (CacheError,AccessError):results.append(dict(project=folder.name,job=job,state='corrupt'))
             return results
+
+    def recovery_evidence(self,project,job):
+        """Private operator input contains the lease/report; never print it."""
+        with self.session():
+            p=self._load(project,job)
+            if self.legacy or 'recovery_binding' not in p or p['state'] not in {'pending_upload','acknowledged'}:raise CacheError('CACHE_RECOVERY_BINDING_UNVERIFIED')
+            return self._envelope(p)
 
     def ensure_ready(self):
         with self.session():

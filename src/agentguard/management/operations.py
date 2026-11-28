@@ -198,26 +198,13 @@ class Operations:
                 manual_plan_requests=db.execute("SELECT count(*) FROM commercial WHERE project=? AND kind='plan'",(project,)).fetchone()[0],
                 self_service_success_verified=False,external_pilot_verified=False,assistance_level='operator-assisted private pilot; external onboarding not validated')
 
-    def recover_job(self,job_id,report,*,operator,reason):
-        operator=label(operator);reason=label(reason)
-        from agentguard.core.manifest import digest
-        with self.db() as db:
-            row=db.execute("SELECT * FROM jobs WHERE id=? AND state='error'",(check_id(job_id),)).fetchone()
-            if row is None:raise AccessError('RECOVERY_REQUIRES_FAILED_JOB',409)
-            signed_receipt=row['result_hash'] is not None
-            if signed_receipt and (not row['seal'] or not hmac.compare_digest(row['seal'],self._seal(row))):raise AccessError('STORED_RESULT_INTEGRITY_ERROR',409)
-            _,runs,cleanup=self._evaluate_report(json.loads(row['spec']),report)
-            if cleanup!='verified' or not runs or any(run.run_manifest is None or not run.run_manifest.started or not run.run_manifest.container_id for run in runs):raise AccessError('RECOVERY_CLEANUP_NOT_PROVEN',409)
-            reference=digest(report)
-            existing=db.execute("SELECT reference FROM recovery_receipts WHERE job=? AND kind='cache_cleanup'",(job_id,)).fetchone()
-            if existing and existing[0]!=reference:raise AccessError('RECOVERY_EVIDENCE_CONFLICT',409)
-            if not existing:db.execute('INSERT INTO recovery_receipts VALUES(?,?,?,?,?,?)',(identity(),row['project'],job_id,'cache_cleanup',reference,self.clock()))
-            db.execute("UPDATE jobs SET cleanup='verified' WHERE id=?",(job_id,))
-            if signed_receipt:
-                updated=db.execute('SELECT * FROM jobs WHERE id=?',(job_id,)).fetchone()
-                db.execute('UPDATE jobs SET seal=? WHERE id=?',(self._seal(updated),job_id))
-            self.event(db,None,row['project'],operator,'recovery.cleanup',token_hash(reason))
-        return dict(cleanup_status='verified',gate_decision='BLOCK',authorizes_release=False,unknown_usage_reservations_retained=True)
+    def register_recovery_evidence(self,runner_token,job_id,lease,evidence):
+        from agentguard.management.operator_recovery import register
+        return register(self,runner_token,job_id,lease,evidence)
+
+    def recover_job(self,job_id,report,*,operator,reason,token=None,project=None):
+        from agentguard.management.operator_recovery import recover
+        return recover(self,job_id,report,operator=operator,reason=reason,token=token,project=project)
 
     def delete_project(self,token,project,*,confirmation):
         with self.db() as db:

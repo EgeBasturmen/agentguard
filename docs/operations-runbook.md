@@ -94,10 +94,16 @@ Kimlikleri gerçek incident manifest/Docker inspect kanıtından alın; örnek m
 Resource cleanup receipt iş sonucunu PASS yapmaz. Gerçek private runner cache varsa:
 
 ```powershell
-agentguard management recover-job --state .agentguard/server --job EXACT_JOB_ID --report PRIVATE_CANONICAL_CACHE.json --reason "Verified private cache after lease loss"
+agentguard management recover-job --state PRIVATE_STATE --project EXACT_PROJECT_ID --job EXACT_JOB_ID --report PRIVATE_CACHE/PROJECT/JOB.entry.json --credential-file PRIVATE_PROJECT_ADMIN_CREDENTIAL --reason "Verified job-bound cleanup evidence"
 ```
 
-Oracle/source/runtime kanıtı doğrulanır; cleanup recover edilebilir, eski karar BLOCK
+Komut güncel `project:admin` credential'ı ve job-bound `.entry.json` envelope ister.
+Bu dosya lease ve raw report içerir; terminalde göstermeyin, public artefakta veya
+destek mesajına eklemeyin. Kanonik `.json` export tek başına recovery yetkisi değildir.
+Sunucu imzalı claim/registration, execution/run/container kimlikleri ve report digest
+eşleşmelidir. Legacy veya kaydedilmemiş kanıt için kimlik uydurulmaz. Detaylar:
+[S2-05 recovery sözleşmesi](s2-05-operator-recovery.md).
+Cleanup recover edilebilir, eski karar BLOCK
 kalır. Unknown compute/model rezervi otomatik boşaltılmaz. Cache yoksa kanıt uydurmayın;
 operatör dış etki/maliyet incelemesini ve destek kaydını sürdürmelidir.
 

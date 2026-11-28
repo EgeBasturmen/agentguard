@@ -86,7 +86,7 @@ def preflight(scenario,agent,environment,tools,policy,required_capabilities=(),m
 
 
 class IntegrationRunner:
-    def run(self,scenario,agent,environment,tools=(),*,policy=None,required_capabilities=(),cancel_event=None,model_config=None,observation_sink=None):
+    def run(self,scenario,agent,environment,tools=(),*,policy=None,required_capabilities=(),cancel_event=None,model_config=None,observation_sink=None,run_id=None):
         scenario=Scenario.model_validate(scenario.model_dump())
         policy=SecurityPolicy.model_validate((policy or SecurityPolicy()).model_dump())
         tools=deepcopy(list(tools))
@@ -130,11 +130,11 @@ class IntegrationRunner:
                 registry=ToolRegistry()
                 for tool in bound: tool.register(registry)
                 result=RunController().run(scenario,agent.launch,environment='integration',registry=registry,policy=policy,
-                    cancel_event=cancel_event,state_observer=environment.snapshot if environment.external else None,environment_identity=fingerprint,execution_deadline=deadline,model_gateway=gateway)
+                    cancel_event=cancel_event,state_observer=environment.snapshot if environment.external else None,environment_identity=fingerprint,execution_deadline=deadline,model_gateway=gateway,**({'run_id':run_id} if run_id is not None else {}))
             else:
                 agent=replace(agent,endpoint=replace(agent.endpoint,timeout_seconds=min(agent.endpoint.timeout_seconds,remaining)))
                 output={}
-                run_id=uuid.uuid4().hex
+                run_id=run_id or uuid.uuid4().hex
                 class View:
                     def __init__(self,initial_state,tracer): pass
                     def get_state(self): return environment.snapshot()

@@ -23,6 +23,7 @@ def dispatch(service,method,path,token,data,query):
         return service.claim(token)
     if method=='POST' and path in {'/api/runner/heartbeat','/api/runner/finish'}:
         return (service.heartbeat if path.endswith('heartbeat') else service.finish)(token,**data)
+    if method=='POST' and path=='/api/runner/recovery-evidence':return service.register_recovery_evidence(token,**data)
     if path=='/api/key/rotate' and method=='POST':
         if data:raise AccessError('UNKNOWN_FIELDS',400)
         return service.rotate_key(token)
@@ -49,6 +50,7 @@ def dispatch(service,method,path,token,data,query):
         if tail[0]=='artifacts' and len(tail)==2:return service.artifact(token,project,tail[1],query.get('grant',[''])[0])
         if tail[0]=='feedback' and len(tail)==2:return service.feedback_item(token,project,tail[1])
     if method=='POST':
+        if len(tail)==3 and tail[0]=='runs' and tail[2]=='recover':return service.recover_job(tail[1],token=token,project=project,**data)
         actions={'members':service.add_member,'keys':service.issue_key,'connections':service.connect,
             'generate':service.generate_cases,'suites':service.freeze_suite,'runs':service.enqueue,
             'data-policy':service.set_data_policy,'plans':service.request_plan,'feedback':service.feedback,

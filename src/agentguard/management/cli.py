@@ -161,12 +161,12 @@ def reconcile_billing(state:Path=typer.Option(...,'--state'),project:str=typer.O
     emit(attempt(lambda:ControlPlane(state).reconcile_billing(project,operator=getpass.getuser(),reference=reference,paid=paid)))
 
 @app.command('recover-job')
-def recover_job(state:Path=typer.Option(...,'--state'),job:str=typer.Option(...,'--job'),report:Path=typer.Option(...,'--report'),reason:str=typer.Option(...,'--reason')):
+def recover_job(state:Path=typer.Option(...,'--state'),job:str=typer.Option(...,'--job'),report:Path=typer.Option(...,'--report'),reason:str=typer.Option(...,'--reason'),project:str=typer.Option(...,'--project'),credential_file:Path=typer.Option(...,'--credential-file')):
     def execute():
         from agentguard.integrations.http import _json
-        with report.open('rb') as stream:raw=stream.read(2*1024*1024+1)
-        if len(raw)>2*1024*1024:raise ValueError('Bounded private cache report required')
-        return ControlPlane(state).recover_job(job,_json(raw),operator=getpass.getuser(),reason=reason)
+        from agentguard.management.operator_recovery import read_private_evidence
+        evidence=read_private_evidence(report)
+        return ControlPlane(state).recover_job(job,evidence,operator=getpass.getuser(),reason=reason,token=credential(credential_file),project=project)
     emit(attempt(execute))
 
 @app.command('reap-container')

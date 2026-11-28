@@ -39,8 +39,11 @@ class SuiteExecution(Model):
     def gate_decision(self)->str:return 'ALLOW' if self.passed else 'BLOCK'
 
 class SuiteRunner:
-    def run(self,repository,snapshot,*,base_dir,cancel_event=None):
+    def run(self,repository,snapshot,*,base_dir,cancel_event=None,run_ids=None):
         snapshot=Snapshot.model_validate(snapshot.model_dump())
+        if run_ids is not None:
+            import re
+            if set(run_ids)!={p['id'] for p in snapshot.cases} or len(set(run_ids.values()))!=len(run_ids) or any(not isinstance(v,str) or not re.fullmatch('[0-9a-f]{32}',v) for v in run_ids.values()):raise ValueError('Explicit execution identities required')
         executions=[]
         for pin in snapshot.cases:
             entry=CaseExecution(id=pin['id'],revision=pin['revision'])
@@ -52,7 +55,7 @@ class SuiteRunner:
                 scenario=Scenario.model_validate(raw['scenario'])
                 reference=dict(case_id=case.id,revision=case.revision,candidate_fingerprint=case.fingerprint,scenario_fingerprint=digest(scenario.model_dump(mode='json',exclude={'generation'})))
                 raw['scenario']={**raw['scenario'],'generation':reference}
-                result=run_integration_plan(IntegrationPlan.model_validate(raw),base_dir=Path(base_dir),cancel_event=cancel_event,expected_contracts=[s.content['contract'] for s in case.sources if s.kind=='contract'])
+                result=run_integration_plan(IntegrationPlan.model_validate(raw),base_dir=Path(base_dir),cancel_event=cancel_event,expected_contracts=[s.content['contract'] for s in case.sources if s.kind=='contract'],**({'run_id':run_ids[pin['id']]} if run_ids is not None else {}))
                 entry.result=result
                 # Recheck after external execution: a concurrent edit/retirement cannot retain admission.
                 repository.admission(snapshot,pin)

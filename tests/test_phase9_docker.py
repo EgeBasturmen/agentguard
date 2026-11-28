@@ -100,8 +100,8 @@ def test_late_real_cache_recovers_cleanup_but_never_lost_lease_pass(tmp_path):
     with running_server(service) as url:
         private=Late(Client(url,worker['runner_token']),source_root=source,cache_root=tmp_path/'cache')
         with pytest.raises(AccessError,match='STALE_LEASE'):private.run_once()
-    report=json.loads((tmp_path/'cache'/project/(job['id']+'.json')).read_text())
-    recovered=service.recover_job(job['id'],report,operator='technical-fixture',reason='Verified actual private runner cache')
+    report=private.evidence.recovery_evidence(project,job['id'])
+    recovered=service.recover_job(job['id'],report,token=token,project=project,operator='technical-fixture',reason='Verified actual private runner cache')
     assert recovered['cleanup_status']=='verified' and recovered['gate_decision']=='BLOCK'
     assert service.job(token,project,job['id'])['gate_decision']=='BLOCK'
     assert service.usage(token,project)['reserved_seconds']>0

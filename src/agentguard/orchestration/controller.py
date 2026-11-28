@@ -15,7 +15,7 @@ from agentguard.contracts.compatibility import controlled_context
 
 class RunController:
     def run(self, scenario: Scenario, agent: AgentLaunchSpec, *, environment="commerce", registry=None,
-            policy: SecurityPolicy | None = None, cancel_event=None, state_observer=None, environment_identity=None, execution_deadline=None,model_gateway=None):
+            policy: SecurityPolicy | None = None, cancel_event=None, state_observer=None, environment_identity=None, execution_deadline=None,model_gateway=None,run_id=None):
         scenario = Scenario.model_validate(scenario.model_dump())
         evaluation_deadline=execution_deadline or time.monotonic()+(policy.timeout_seconds if policy is not None else 30)
         from agentguard.integrations.agents import ContainerLaunchSpec
@@ -37,7 +37,7 @@ class RunController:
             from agentguard.model_gateway.gateway import ModelArguments
             if registry.get('model.generate') is not None:raise ValueError('Reserved model gateway route cannot be overridden')
             registry.register('model.generate',ModelArguments,_reserved_model_handler,stateful=True)
-        manifest = RuntimeManifest(run_id=uuid.uuid4().hex)
+        manifest = RuntimeManifest(run_id=run_id if run_id is not None else uuid.uuid4().hex)
         runtime = ControlledDockerRuntime()
         holders = {}
         class StateView:

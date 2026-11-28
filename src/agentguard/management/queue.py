@@ -132,7 +132,9 @@ class Queue:
             value=secrets.token_urlsafe(32);now=self.clock()
             db.execute("UPDATE jobs SET state='leased',runner=?,lease=?,lease_until=?,started=?,updated=?,cleanup='unverified' WHERE id=? AND state='queued'",(runner['id'],token_hash(value),now+30,now,now,job['id']))
             self._job_event(db,job['id'],job['project'],'leased')
-            return dict(id=job['id'],project=job['project'],lease=value,lease_seconds=30,max_seconds=job['reserved_seconds'],spec=json.loads(job['spec']))
+            from agentguard.management.operator_recovery import issue
+            binding=issue(self,db,job,runner,value)
+            return dict(id=job['id'],project=job['project'],lease=value,lease_seconds=30,max_seconds=job['reserved_seconds'],spec=json.loads(job['spec']),recovery_binding=binding)
 
     def _leased(self,db,runner_token,job_id,lease):
         runner=self._runner(db,runner_token)

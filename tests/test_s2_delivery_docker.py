@@ -60,9 +60,13 @@ def test_existing_operator_cleanup_preserves_signed_failure_receipt(tmp_path):
     s,o,p=setup_project(tmp_path);source=tmp_path/'source';source.mkdir()
     (source/'agent.py').write_text("class Agent:\n def run(self,task,sandbox):\n  sandbox.call('file.write',{'filename':'note.txt','content':'done'})\n")
     _,suite=prepare(s,o,p,source);w=runner(s,o,p);j=s.enqueue(o,p,suite['id'],'cleanup-receipt');claim=s.claim(w['runner_token'])
-    proof=execute_spec(claim['spec'],source)
+    proof=execute_spec(claim['spec'],source,execution_binding=claim['recovery_binding'])
+    from agentguard.management.cache import EvidenceCache
+    cache=EvidenceCache(tmp_path/'cache',server='http://127.0.0.1:8766',credential=w['runner_token'])
+    cache.begin(claim);cache.complete(claim,proof);evidence=cache.recovery_evidence(p,j['id'])
+    s.register_recovery_evidence(w['runner_token'],j['id'],claim['lease'],evidence)
     failure={'failure':'RUNNER_EXECUTION_ERROR'}
     assert s.finish(w['runner_token'],j['id'],claim['lease'],failure)['gate_decision']=='BLOCK'
-    assert s.recover_job(j['id'],proof,operator='synthetic-operator',reason='Existing cleanup contract')['cleanup_status']=='verified'
+    assert s.recover_job(j['id'],evidence,token=o,project=p,operator='synthetic-operator',reason='Existing cleanup contract')['cleanup_status']=='verified'
     replay=s.finish(w['runner_token'],j['id'],claim['lease'],failure)
     assert replay['delivery_accepted'] and replay['gate_decision']=='BLOCK' and replay['cleanup_status']=='verified'

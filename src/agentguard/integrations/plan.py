@@ -60,7 +60,7 @@ def run_plan(path,*,cancel_event=None,preflight_only=False):
     return run_integration_plan(plan,base_dir=path.parent,cancel_event=cancel_event,preflight_only=preflight_only)
 
 
-def run_integration_plan(plan,*,base_dir, cancel_event=None,preflight_only=False,expected_contracts=None,observation_sink=None):
+def run_integration_plan(plan,*,base_dir, cancel_event=None,preflight_only=False,expected_contracts=None,observation_sink=None,run_id=None):
     plan=IntegrationPlan.model_validate(plan.model_dump(mode='json'))
     base_dir=Path(base_dir).resolve()
     config=plan.agent
@@ -107,4 +107,4 @@ def run_integration_plan(plan,*,base_dir, cancel_event=None,preflight_only=False
     if preflight_only:
         return preflight(plan.scenario,agent,environment,tools,SecurityPolicy.model_validate(plan.policy),plan.required_capabilities,plan.model)
     return IntegrationRunner().run(plan.scenario,agent,environment,tools,policy=SecurityPolicy.model_validate(plan.policy),
-        required_capabilities=plan.required_capabilities,cancel_event=cancel_event,model_config=plan.model,observation_sink=observation_sink)
+        required_capabilities=plan.required_capabilities,cancel_event=cancel_event,model_config=plan.model,observation_sink=observation_sink,**({'run_id':run_id} if run_id is not None else {}))

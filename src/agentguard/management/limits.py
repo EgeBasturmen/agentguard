@@ -9,5 +9,7 @@ def logical_storage(db,project):
     total=0
     for table,field in [('objects','payload'),('artifacts','payload'),('jobs','spec'),('commercial','payload')]:
         total+=db.execute(f'SELECT COALESCE(SUM(length(CAST({field} AS BLOB))),0) FROM {table} WHERE project=?',(project,)).fetchone()[0]
+    if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='recovery_receipts'").fetchone():
+        total+=db.execute('SELECT COALESCE(SUM(length(CAST(reference AS BLOB))),0) FROM recovery_receipts WHERE project=?',(project,)).fetchone()[0]
     total+=db.execute("SELECT COALESCE(SUM(reserved_bytes),0) FROM jobs WHERE project=? AND state IN ('queued','leased','running','error') AND decision IS NULL",(project,)).fetchone()[0]
     return total
